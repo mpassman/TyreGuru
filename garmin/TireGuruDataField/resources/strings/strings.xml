@@ -1,0 +1,11 @@
+<strings>
+    <string id="AppName">TyreGuru</string>
+    <string id="FrontPsi">Front air now, PSI (estimate or gauge)</string>
+    <string id="FrontTgt">Front target PSI</string>
+    <string id="RearPsi">Rear air now, PSI (estimate or gauge)</string>
+    <string id="RearTgt">Rear target PSI</string>
+    <string id="MaxPsi">Tire maximum PSI (0 = none)</string>
+    <string id="FrontSeal">Front sealant left, %</string>
+    <string id="RearSeal">Rear sealant left, %</string>
+    <string id="Updated">Numbers updated on (YYYYMMDD)</string>
+</strings>

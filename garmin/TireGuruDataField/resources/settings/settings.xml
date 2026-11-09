@@ -1,0 +1,28 @@
+<resources>
+    <settings>
+        <setting propertyKey="@Properties.frontPsi" title="@Strings.FrontPsi">
+            <settingConfig type="numeric" min="0" max="150" />
+        </setting>
+        <setting propertyKey="@Properties.frontTgt" title="@Strings.FrontTgt">
+            <settingConfig type="numeric" min="0" max="150" />
+        </setting>
+        <setting propertyKey="@Properties.rearPsi" title="@Strings.RearPsi">
+            <settingConfig type="numeric" min="0" max="150" />
+        </setting>
+        <setting propertyKey="@Properties.rearTgt" title="@Strings.RearTgt">
+            <settingConfig type="numeric" min="0" max="150" />
+        </setting>
+        <setting propertyKey="@Properties.maxPsi" title="@Strings.MaxPsi">
+            <settingConfig type="numeric" min="0" max="250" />
+        </setting>
+        <setting propertyKey="@Properties.frontSeal" title="@Strings.FrontSeal">
+            <settingConfig type="numeric" min="0" max="100" />
+        </setting>
+        <setting propertyKey="@Properties.rearSeal" title="@Strings.RearSeal">
+            <settingConfig type="numeric" min="0" max="100" />
+        </setting>
+        <setting propertyKey="@Properties.updated" title="@Strings.Updated">
+            <settingConfig type="numeric" min="0" max="99999999" />
+        </setting>
+    </settings>
+</resources>

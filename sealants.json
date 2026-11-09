@@ -1,0 +1,640 @@
+{
+ "version": 1,
+ "updated": "2026-11-08",
+ "generic": {
+  "road": [
+   [
+    28,
+    50
+   ],
+   [
+    32,
+    55
+   ],
+   [
+    40,
+    60
+   ],
+   [
+    45,
+    80
+   ],
+   [
+    50,
+    95
+   ]
+  ],
+  "gravel": [
+   [
+    28,
+    50
+   ],
+   [
+    32,
+    55
+   ],
+   [
+    40,
+    60
+   ],
+   [
+    45,
+    80
+   ],
+   [
+    50,
+    95
+   ]
+  ],
+  "mtb": [
+   [
+    51,
+    95
+   ],
+   [
+    53,
+    100
+   ],
+   [
+    56,
+    100
+   ],
+   [
+    58,
+    105
+   ],
+   [
+    61,
+    110
+   ],
+   [
+    64,
+    125
+   ],
+   [
+    71,
+    130
+   ],
+   [
+    76,
+    140
+   ]
+  ]
+ },
+ "products": [
+  {
+   "id": "stans-original",
+   "name": "Stan's Original / Race Day",
+   "family": "Stan's",
+   "formula": "Original and Race Day",
+   "aliases": [
+    "Stan's NoTubes",
+    "Stan's NoTubes Original"
+   ],
+   "dose": {
+    "road": [
+     [
+      28,
+      50
+     ],
+     [
+      32,
+      55
+     ],
+     [
+      40,
+      60
+     ],
+     [
+      45,
+      80
+     ],
+     [
+      50,
+      95
+     ]
+    ],
+    "gravel": [
+     [
+      28,
+      50
+     ],
+     [
+      32,
+      55
+     ],
+     [
+      40,
+      60
+     ],
+     [
+      45,
+      80
+     ],
+     [
+      50,
+      95
+     ]
+    ],
+    "mtb": [
+     [
+      51,
+      95
+     ],
+     [
+      53,
+      100
+     ],
+     [
+      56,
+      100
+     ],
+     [
+      58,
+      105
+     ],
+     [
+      61,
+      110
+     ],
+     [
+      64,
+      125
+     ],
+     [
+      71,
+      130
+     ],
+     [
+      76,
+      140
+     ]
+    ]
+   },
+   "src": "maker",
+   "srcUrl": "https://stans.com/pages/how-much-sealant",
+   "note": "Stan's chart gives Original and Race Day the same amounts."
+  },
+  {
+   "id": "stans-rolled-gold",
+   "name": "Stan's Rolled Gold",
+   "family": "Stan's",
+   "formula": "Rolled Gold",
+   "aliases": [],
+   "dose": {
+    "road": [
+     [
+      28,
+      35
+     ],
+     [
+      32,
+      40
+     ],
+     [
+      40,
+      50
+     ],
+     [
+      45,
+      60
+     ],
+     [
+      50,
+      70
+     ]
+    ],
+    "gravel": [
+     [
+      28,
+      35
+     ],
+     [
+      32,
+      40
+     ],
+     [
+      40,
+      50
+     ],
+     [
+      45,
+      60
+     ],
+     [
+      50,
+      70
+     ]
+    ],
+    "mtb": [
+     [
+      51,
+      70
+     ],
+     [
+      53,
+      75
+     ],
+     [
+      56,
+      75
+     ],
+     [
+      58,
+      80
+     ],
+     [
+      61,
+      80
+     ],
+     [
+      64,
+      85
+     ]
+    ]
+   },
+   "src": "maker",
+   "srcUrl": "https://stans.com/pages/how-much-sealant",
+   "note": "Lower amounts than Original. Stan's lists no Rolled Gold amount for tires wider than 2.5 inch."
+  },
+  {
+   "id": "mucoff-road-gravel",
+   "name": "Muc-Off road and gravel",
+   "family": "Muc-Off",
+   "formula": "Road and Gravel",
+   "aliases": [
+    "Muc-Off No Puncture Hassle"
+   ],
+   "dose": {
+    "road": [
+     [
+      28,
+      67
+     ],
+     [
+      50,
+      67
+     ]
+    ],
+    "gravel": [
+     [
+      28,
+      67
+     ],
+     [
+      50,
+      67
+     ]
+    ],
+    "mtb": [
+     [
+      51,
+      67
+     ],
+     [
+      64,
+      122
+     ],
+     [
+      76,
+      140
+     ]
+    ]
+   },
+   "lifeMaxDays": 180,
+   "src": "maker",
+   "srcUrl": "https://muc-off.com/products/no-puncture-hassle-tubeless-sealant",
+   "note": "Muc-Off lists 60 to 75 ml for 700c cross tires (midpoint used). It has no separate road or gravel chart."
+  },
+  {
+   "id": "mucoff-mtb",
+   "name": "Muc-Off mountain bike",
+   "family": "Muc-Off",
+   "formula": "MTB",
+   "aliases": [],
+   "dose": {
+    "road": [
+     [
+      28,
+      67
+     ],
+     [
+      50,
+      67
+     ]
+    ],
+    "gravel": [
+     [
+      28,
+      67
+     ],
+     [
+      50,
+      67
+     ]
+    ],
+    "mtb": [
+     [
+      51,
+      67
+     ],
+     [
+      64,
+      122
+     ],
+     [
+      76,
+      140
+     ]
+    ]
+   },
+   "lifeMaxDays": 180,
+   "src": "maker",
+   "srcUrl": "https://muc-off.com/products/no-puncture-hassle-tubeless-sealant",
+   "note": "60 to 75 ml for 26 and 27.5 inch, 105 to 140 ml for 29 inch (midpoints used)."
+  },
+  {
+   "id": "orange-regular",
+   "name": "Orange Seal Regular",
+   "family": "Orange Seal",
+   "formula": "Regular",
+   "aliases": [
+    "Orange Seal"
+   ],
+   "dose": {
+    "road": [
+     [
+      28,
+      50
+     ],
+     [
+      32,
+      55
+     ],
+     [
+      40,
+      60
+     ],
+     [
+      45,
+      80
+     ],
+     [
+      50,
+      95
+     ]
+    ],
+    "gravel": [
+     [
+      28,
+      50
+     ],
+     [
+      32,
+      55
+     ],
+     [
+      40,
+      60
+     ],
+     [
+      45,
+      80
+     ],
+     [
+      50,
+      95
+     ]
+    ],
+    "mtb": [
+     [
+      51,
+      88
+     ],
+     [
+      64,
+      118
+     ]
+    ]
+   },
+   "src": "secondary",
+   "srcUrl": "https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",
+   "note": "Only 3 oz (26 and 27.5 inch) and 4 oz (29 inch) found, quoted by a reviewer. Road and gravel use the generic dose."
+  },
+  {
+   "id": "orange-endurance",
+   "name": "Orange Seal Endurance",
+   "family": "Orange Seal",
+   "formula": "Endurance",
+   "aliases": [],
+   "dose": {
+    "road": [
+     [
+      28,
+      50
+     ],
+     [
+      32,
+      55
+     ],
+     [
+      40,
+      60
+     ],
+     [
+      45,
+      80
+     ],
+     [
+      50,
+      95
+     ]
+    ],
+    "gravel": [
+     [
+      28,
+      50
+     ],
+     [
+      32,
+      55
+     ],
+     [
+      40,
+      60
+     ],
+     [
+      45,
+      80
+     ],
+     [
+      50,
+      95
+     ]
+    ],
+    "mtb": [
+     [
+      51,
+      88
+     ],
+     [
+      64,
+      118
+     ]
+    ]
+   },
+   "src": "secondary",
+   "srcUrl": "https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",
+   "note": "Same amounts as Regular. No separate Endurance figure found."
+  },
+  {
+   "id": "silca-ultimate",
+   "name": "Silca Ultimate",
+   "family": "Silca",
+   "formula": "Ultimate",
+   "aliases": [
+    "Silca"
+   ],
+   "dose": {
+    "road": [
+     [
+      28,
+      50
+     ],
+     [
+      32,
+      55
+     ],
+     [
+      40,
+      60
+     ],
+     [
+      45,
+      80
+     ],
+     [
+      50,
+      95
+     ]
+    ],
+    "gravel": [
+     [
+      35,
+      105
+     ],
+     [
+      50,
+      105
+     ]
+    ],
+    "mtb": [
+     [
+      51,
+      95
+     ],
+     [
+      64,
+      125
+     ],
+     [
+      76,
+      140
+     ]
+    ]
+   },
+   "src": "secondary",
+   "srcUrl": "https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",
+   "note": "90 to 120 ml for gravel (midpoint), quoted by a reviewer. Road and mountain bike use the generic dose."
+  },
+  {
+   "id": "schwalbe-doc-blue-pro",
+   "name": "Schwalbe Doc Blue Professional",
+   "family": "Schwalbe",
+   "formula": "Doc Blue Professional",
+   "aliases": [
+    "Schwalbe Doc Blue"
+   ],
+   "dose": {
+    "road": [
+     [
+      23,
+      75
+     ],
+     [
+      60,
+      75
+     ],
+     [
+      62,
+      105
+     ],
+     [
+      100,
+      105
+     ]
+    ],
+    "gravel": [
+     [
+      23,
+      75
+     ],
+     [
+      60,
+      75
+     ],
+     [
+      62,
+      105
+     ],
+     [
+      100,
+      105
+     ]
+    ],
+    "mtb": [
+     [
+      23,
+      75
+     ],
+     [
+      60,
+      75
+     ],
+     [
+      62,
+      105
+     ],
+     [
+      100,
+      105
+     ]
+    ]
+   },
+   "lifeMaxDays": 210,
+   "src": "maker",
+   "srcUrl": "https://www.schwalbetires.com/tire-accessories/sealants-mounting-fluids/",
+   "note": "60 to 90 ml for 23 to 60 mm tires, 90 to 120 ml for 62 to 100 mm (midpoints used). Effective up to 7 months."
+  },
+  {
+   "id": "bontrager-tlr",
+   "name": "Bontrager TLR",
+   "family": "Bontrager",
+   "formula": "TLR",
+   "aliases": [],
+   "dose": null,
+   "src": null,
+   "note": "No maker amount found. Generic dose used."
+  },
+  {
+   "id": "other",
+   "name": "Other",
+   "family": "Other",
+   "formula": "",
+   "aliases": [],
+   "dose": null,
+   "src": null,
+   "note": "Generic dose used. Follow the label."
+  }
+ ]
+}

@@ -1374,7 +1374,7 @@ async function autoLocate(force){
 }
 load();render();
 /* Sealant list updates: set SEALANT_URL to the hosted sealants.json (https). The last good copy is cached and used offline. */
-const SEALANT_URL='';
+const SEALANT_URL='https://raw.githubusercontent.com/mpassman/TyreGuru/main/sealants.json';
 (function(){try{const c=localStorage.getItem('tg_sealants');if(c&&TG.setSealants(JSON.parse(c)))render()}catch(e){}
   if(!SEALANT_URL||typeof fetch!=='function')return;
   fetch(SEALANT_URL,{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&TG.setSealants(j)){try{localStorage.setItem('tg_sealants',JSON.stringify(j))}catch(e){}render()}}).catch(()=>{})})();

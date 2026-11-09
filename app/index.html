@@ -616,7 +616,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-09 j';
+const BUILD='2026-11-09 n';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -1164,11 +1164,15 @@ function gaugeRow(t,x,L,ex){ex=ex||{};
 function isNewTire(t){return t.condition==='new'||(t.installMs>0&&Date.now()-t.installMs<45*864e5)}
 function newTireNote(t){if(!isNewTire(t))return '';const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type),full=TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel),put=t.sealant.ml||0;
   return `<p class="mute" style="margin:6px 0 0;color:var(--tl)"><b>New tire:</b> start with about ${vfmt(d.init)} of ${esc(t.sealant.brand||'sealant')}${d.initEst?' (estimate)':''}, because new tires soak some up. Later the recommended level is ${vfmt(full)}.${put>0&&put<d.init*0.9?` You put in ${vfmt(put)}, which is below the suggested start.`:''}</p>`}
+/* One line that spells out the air zones in PSI, using the same limits as the dial (airZones): green from 90% of target, refill soon from 80%, red below that. */
+function airZoneLine(x){const Z=x.Z,r=v=>String(Math.round(v*10)/10);
+  return `<p class="mute zoneline" style="margin:6px 0 0;font-size:12px">Target ${r(Z.tgt)} PSI · <b>Green</b> ${r(Z.good0)}–${r(Z.good1)} · <b>Refill soon</b> ${r(Z.low)}–${r(Z.good0)} (10–20% below target) · <b>Red</b> under ${r(Z.low)} (more than 20% below)</p>`}
 function sumCard(t){
   const i=S.tires.indexOf(t),x=tireStatus(t),L=levelWord(x),nm=t.wheel==='front'?'Front':'Rear';
   return `<div class="card big ${x.red?'red':'green'}"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${nm} tire</h2><span class="tag ${x.red?'red':'green'}">${x.red?'✕ RED':'✓ GREEN'}</span></div>
   ${gaugeRow(t,x,L,{air:`<div class="gin"><label for="ha${i}">Air measured, PSI</label><input id="ha${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" value="" placeholder="e.g. 42.6"></div>`,seal:`<div class="gin"><label for="hs${i}">Sealant checked</label><select id="hs${i}"><option value="">Not checked</option><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div>`})}${patternsOn()?'<p class="mute" style="margin:0;font-size:11px;text-align:center">Stripes = low · dots = OK · solid = good · grid = too high · cross-hatch red = overfilled</p>':''}
   <p class="fix" style="${(x.ar.known&&!x.ar.needAir&&x.airRed)?'color:var(--red)':''}">${x.red?x.fix:(x.ar.known?'Good':'Log an air fill to start')}</p>
+  ${airZoneLine(x)}
   ${newTireNote(t)}
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button data-act="homesave" data-i="${i}">Save readings</button><button class="ghost" data-open="${i}">Details ›</button></div><p class="mute" id="hm${i}" aria-live="polite" style="margin:6px 0 0">${esc(msg['h'+i]||'')}</p></div>`;
 }
@@ -1207,10 +1211,18 @@ function viewDetail(i){
   ${pick?`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Sealant match</h3><span class="tag grey">Suggestion</span></div><p style="margin:8px 0 2px"><b>${esc(pick[0])}</b></p><p class="mute" style="margin:0">${esc(pick[1])}</p><p class="mute">Based on your riding. Not a paid placement.</p></div>`:''}
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button data-goto="settings:log">Log air or sealant</button><button class="ghost" data-goto="trends">See trends</button></div>`;
 }
+/* time window shared by both Trends charts: Week, Month, 3 months, Year, or All (back to the earliest record of this tire: install date, first fill or refill, first ride) */
+let trRange='all';
+function histStart(t){const c=[(t.fills||[]).length?Math.min(...t.fills.map(f=>f.dateMs)):0,t.sealant&&t.sealant.dateMs].concat((t.sealHist||[]).map(h=>h.dateMs),(t.checks||[]).map(c=>c.dateMs)).filter(x=>x>0);
+  const r=S.rides.filter(x=>!isProv(x)&&x.startMs>=(t.installMs||0)).map(x=>x.startMs);const m=Math.min(...c,...(r.length?r:[Infinity]));return isFinite(m)?m:(t.installMs||Date.now())}
+function trWin(t){const now=Date.now(),days={w:7,m:30,q:90,y:365}[trRange];let t0=days?now-days*DAY:histStart(t);t0=Math.min(t0,now-14*DAY);return [t0,now-t0]}
+const trRides=(t0,X,H,B)=>S.rides.filter(r=>!isProv(r)&&r.startMs>=t0&&r.startMs<=Date.now()).map(r=>`<line x1="${X(r.startMs).toFixed(1)}" y1="${H-B-7}" x2="${X(r.startMs).toFixed(1)}" y2="${H-B}" stroke="var(--mute)" stroke-opacity=".55"/>`).join('');
+const trNoRec=(t0,first,X,L,T,H,B)=>first>t0+DAY?`<rect x="${L}" y="${T}" width="${Math.max(0,X(first)-L).toFixed(1)}" height="${H-T-B}" fill="var(--line)" opacity=".35"/><text x="${(L+4)}" y="${T+12}" font-size="10" fill="var(--mute)">no record yet</text>`:'';
+const trDates=(t0,span,X,H,W,R)=>`<line x1="${X(Date.now()).toFixed(1)}" y1="14" x2="${X(Date.now()).toFixed(1)}" y2="${H-40}" stroke="var(--mute)" stroke-dasharray="2 3"/><text x="${Math.min(W-R-10,X(Date.now())).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--ink)">now</text><text x="${X(t0)}" y="${H-6}" font-size="11" fill="var(--mute)">${fmtD(t0)}</text>`+(span>45*DAY?`<text x="${X(t0+span/2).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--mute)">${fmtD(t0+span/2)}</text>`:'');
 function airTrendCard(t){
   const f=(t.fills||[]).slice().sort((a,b)=>a.dateMs-b.dateMs);
   if(!f.length)return `<div class="card"><h3 style="margin-top:0">Air pressure</h3><p class="mute" style="margin:0">No air is logged for this tire yet. Log a fill or a gauge reading in Settings, Log, and the pressure curve appears here.</p></div>`;
-  const A=advice(t),Z=airZones(A),nowMs=Date.now(),t0=Math.max(f[0].dateMs,nowMs-90*DAY),span=Math.max(DAY,nowMs-t0),N=60;
+  const A=advice(t),Z=airZones(A),nowMs=Date.now(),[t0,span]=trWin(t),N=90;
   const at=ms=>{const prior=f.filter(c=>c.dateMs<=ms);if(!prior.length)return null;const st=TG.airState({lastFill:prior[prior.length-1],fills:prior.slice(0,-1),targetPsi:A.tgt,nowMs:ms,nowC:null,nowAltM:null,a:S.a});return st.known?st.estPsi:null};
   const lk=TG.learnedLeakPct(f,S.a),lastF=f[f.length-1],cur=at(nowMs);
   const proj=Math.max(2*DAY,Math.min(14*DAY,span*0.25)),T1=nowMs+proj;
@@ -1222,10 +1234,10 @@ function airTrendCard(t){
   const band=`<rect x="${L}" y="${Y(Z.good1).toFixed(1)}" width="${W-L-R}" height="${Math.max(0,Y(Z.good0)-Y(Z.good1)).toFixed(1)}" fill="var(--green,#2a9d4b)" opacity=".18"/>`;
   const ref=(v,lab,col)=>`<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W-R}" y2="${Y(v).toFixed(1)}" stroke="${col}" stroke-dasharray="4 3"/><text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">${Math.round(v)}</text>`;
   const dots=f.filter(c=>c.dateMs>=t0).map(c=>`<circle cx="${X(c.dateMs).toFixed(1)}" cy="${Y(c.afterPsi).toFixed(1)}" r="4" fill="var(--ink)"/>`+(c.beforePsi!=null&&c.beforePsi!==c.afterPsi?`<circle cx="${X(c.dateMs).toFixed(1)}" cy="${Y(c.beforePsi).toFixed(1)}" r="3.5" fill="none" stroke="var(--ink)" stroke-width="2"/>`:'')).join('');
-  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Estimated air pressure over time with target, low and maximum lines" style="display:block">${band}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--line)"/>${ref(Z.tgt,'target','var(--ink)')}${ref(Z.low,'low','var(--red)')}<path d="${ln(pts)}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${pr.length?`<path d="${ln(pr)}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>`:''}${dots}<line x1="${X(nowMs).toFixed(1)}" y1="${T}" x2="${X(nowMs).toFixed(1)}" y2="${H-B}" stroke="var(--mute)" stroke-dasharray="2 3"/><text x="${L}" y="${H-6}" font-size="11" fill="var(--mute)">${fmtD(t0)}</text><text x="${X(nowMs).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--ink)">now</text></svg>`;
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Estimated air pressure over time with target, low and maximum lines" style="display:block">${trNoRec(t0,f[0].dateMs,X,L,T,H,B)}${band}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--line)"/>${trRides(t0,X,H,B)}${ref(Z.tgt,'target','var(--ink)')}${ref(Z.low,'low','var(--red)')}<path d="${ln(pts)}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${pr.length?`<path d="${ln(pr)}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>`:''}${dots}<line x1="${X(nowMs).toFixed(1)}" y1="${T}" x2="${X(nowMs).toFixed(1)}" y2="${H-B}" stroke="var(--mute)" stroke-dasharray="2 3"/>${trDates(t0,span,X,H,W,R)}</svg>`;
   let eta='';if(cur!=null){if(cur<=Z.low)eta='Already below the low line.';else if(lk.pct>0){const d=Math.log(Z.low/cur)/Math.log(1-lk.pct/100);eta=d<=365?`At this leak rate it reaches the low line in about ${Math.max(1,Math.round(d))} day${Math.round(d)===1?'':'s'}.`:'Leaking slowly. No low-air date in the next year.'}}
   const pu=v=>(Math.round(v*10)/10)+' PSI';
-  return `<div class="card"><h3 style="margin-top:0">Air pressure</h3>${svg}<p class="mute" style="margin:4px 0 0">Solid line: estimate. Dotted: where it is heading. <b>●</b> fill or gauge reading, <b>○</b> pressure before filling. Green band: good range. Red line: low (20% under target).</p></div>
+  return `<div class="card"><h3 style="margin-top:0">Air pressure</h3>${svg}<p class="mute" style="margin:4px 0 0">Solid line: estimate. Dotted: where it is heading. <b>●</b> fill or gauge reading, <b>○</b> pressure before filling. Green band: good range. Red line: low (20% under target). Small ticks at the bottom are rides.</p></div>
   <div class="stat"><span class="mute">Estimate now</span><br><b>${cur!=null?pu(cur):'unknown'}</b></div>
   <div class="stat"><span class="mute">Target</span><br><b>${pu(A.tgt)}</b></div>
   <div class="stat"><span class="mute">Last fill or reading</span><br><b>${fmtD(lastF.dateMs)} · ${pu(lastF.afterPsi)}</b></div>
@@ -1234,35 +1246,52 @@ function airTrendCard(t){
 }
 function sealTrendCard(t){
   const nowMs=Date.now(),cur=Object.assign({},t.sealant,{endMs:null}),segs=(t.sealHist||[]).concat([cur]).filter(x=>x&&x.dateMs).sort((a,b)=>a.dateMs-b.dateMs);
-  const t0=Math.max(segs[0].dateMs,nowMs-180*DAY),span=Math.max(DAY,nowMs-t0),N=90,pts=[];
+  const [t0,span]=trWin(t),N=120,f=US()?1/29.5735:1;let doseNow=0;
   const levelAt=ms=>{let sg=null;for(const x of segs)if(x.dateMs<=ms)sg=x;if(!sg)return null;
     const t2=Object.assign({},t,{sealant:Object.assign({},sg,{events:(sg.events||[]).filter(e=>e.dateMs<=ms)}),checks:(t.checks||[]).filter(c=>c.dateMs<=ms&&c.dateMs>=sg.dateMs)});
-    const st=sealantStateFor(t2,S.rides,ms);return Math.max(0,Math.min(1,st.leftMl/(st.doseMl||1)))};
-  for(let k=0;k<=N;k++){const ms=t0+span*k/N;pts.push([ms,levelAt(ms)])}
-  const W=320,H=190,L=34,R=8,T=12,B=40,X=ms=>L+(W-L-R)*(ms-t0)/span,Y=v=>T+(H-T-B)*(1-v);
-  let path='',pen=false;pts.forEach(q=>{if(q[1]==null){pen=false;return}path+=`${pen?'L':'M'}${X(q[0]).toFixed(1)},${Y(q[1]).toFixed(1)} `;pen=true});
+    const st=sealantStateFor(t2,S.rides,ms);if(ms<=nowMs)doseNow=st.doseMl||doseNow;return Math.max(0,st.leftMl)*f};   // amount left, in the rider's unit (fl oz or ml)
+  const pts=[];for(let k=0;k<=N;k++){const ms=t0+span*k/N;pts.push([ms,levelAt(ms)])}
+  const curV=levelAt(nowMs),dose=doseNow*f,trig=(S.a.triggerFraction||0.4)*dose;
+  // where it is heading: the same model run forward with no further events (no future rides assumed)
+  let etaD=null;if(curV!=null){if(curV<=trig)etaD=0;else for(let d=1;d<=400;d++){const v=levelAt(nowMs+d*DAY);if(v!=null&&v<=trig){etaD=d;break}}}
+  const proj=Math.max(7*DAY,Math.min(60*DAY,span*0.25,etaD!=null&&etaD>0?(etaD+3)*DAY:60*DAY)),T1=nowMs+proj,pr=[];
+  if(curV!=null)for(let k=0;k<=16;k++){const ms=nowMs+proj*k/16;pr.push([ms,levelAt(ms)])}
+  const M=Math.max(dose,...pts.map(q=>q[1]||0),...pr.map(q=>q[1]||0),US()?0.5:10),raw=M/4,mag=Math.pow(10,Math.floor(Math.log10(raw))),step=[1,2,2.5,5,10].map(m=>m*mag).find(x=>x>=raw)||raw,top=Math.ceil(M/step-1e-9)*step,ticks=[];for(let v=0;v<=top+1e-9;v+=step)ticks.push(+v.toFixed(3));
+  const W=320,H=190,L=38,R=8,T=14,B=40,X=ms=>L+(W-L-R)*(ms-t0)/(T1-t0),Y=v=>T+(H-T-B)*(1-v/top);
+  const ln=a=>{let d='',pen=false;a.forEach(q=>{if(q[1]==null){pen=false;return}d+=`${pen?'L':'M'}${X(q[0]).toFixed(1)},${Y(q[1]).toFixed(1)} `;pen=true});return d};
   const lvl=ms=>{const v=levelAt(ms);return v==null?0:v};
-  // everything that changed the sealant, newest first, for the list and the chart markers
   const ch=[];segs.forEach((sg,i)=>{ch.push({ms:sg.dateMs,k:i===0?'start':'refill',ml:sg.addedMl!=null?sg.addedMl:sg.ml,brand:sg.brand});(sg.events||[]).forEach(e=>ch.push({ms:e.dateMs,k:e.kind==='removed'?'removed':'puncture',ml:e.ml,sub:e.kind}))});
   (t.checks||[]).forEach(c=>ch.push({ms:c.dateMs,k:'check',lv:c.level}));
   ch.sort((a,b)=>b.ms-a.ms);
-  const mk=ch.filter(c=>c.ms>=t0&&c.ms<=nowMs+DAY).map(c=>{const x=X(Math.min(c.ms,nowMs)).toFixed(1),y=Y(lvl(Math.min(c.ms,nowMs))).toFixed(1);
-    if(c.k==='refill'||c.k==='start')return `<path d="M${x},${(H-B+4).toFixed(1)} l-5,9 l10,0 z" fill="var(--ink)"/><line x1="${x}" y1="${y}" x2="${x}" y2="${H-B}" stroke="var(--ink)" stroke-opacity=".35"/>`;
+  const mk=ch.filter(c=>c.ms>=t0&&c.ms<=nowMs+DAY).map(c=>{const m=Math.min(c.ms,nowMs),x=X(m).toFixed(1),y=Y(lvl(m)).toFixed(1);
+    if(c.k==='refill'||c.k==='start')return `<path d="M${x},${(H-B+4).toFixed(1)} l-5,9 l10,0 z" fill="var(--ink)"/><line x1="${x}" y1="${y}" x2="${x}" y2="${H-B}" stroke="var(--ink)" stroke-opacity=".35"/><circle cx="${x}" cy="${y}" r="3.5" fill="var(--ink)"/>`;
     if(c.k==='puncture')return `<circle cx="${x}" cy="${y}" r="4.5" fill="var(--red)"/>`;
     if(c.k==='removed')return `<circle cx="${x}" cy="${y}" r="4.5" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>`;
     return `<path d="M${x},${(+y-5).toFixed(1)} l4,5 l-4,5 l-4,-5 z" fill="var(--mute)"/>`}).join('');
-  const grid=[0,.5,1].map(v=>`<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W-R}" y2="${Y(v).toFixed(1)}" stroke="var(--line)"/><text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">${v===1?'full':v===0?'0':'½'}</text>`).join('');
-  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Sealant left over time, with refills, punctures and removals marked" style="display:block">${grid}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><path d="${path}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${mk}<text x="${L}" y="${H-6}" font-size="11" fill="var(--mute)">${fmtD(t0)}</text><text x="${W-R}" y="${H-6}" text-anchor="end" font-size="11" fill="var(--ink)">now</text></svg>`;
+  const tl=v=>US()?(Math.abs(v-Math.round(v))<1e-6?String(Math.round(v)):v.toFixed(1)):String(Math.round(v));
+  const grid=ticks.map(v=>`<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W-R}" y2="${Y(v).toFixed(1)}" stroke="var(--line)"/><text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">${tl(v)}</text>`).join('')+`<line x1="${L}" y1="${Y(dose).toFixed(1)}" x2="${W-R}" y2="${Y(dose).toFixed(1)}" stroke="var(--ink)" stroke-dasharray="4 3" stroke-opacity=".6"/><text x="${W-R}" y="${(Y(dose)-3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">full dose ${tl(dose)}</text><line x1="${L}" y1="${Y(trig).toFixed(1)}" x2="${W-R}" y2="${Y(trig).toFixed(1)}" stroke="var(--red)" stroke-dasharray="4 3"/><text x="${W-R}" y="${(Y(trig)-3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--red)">refill below ${tl(trig)}</text><text x="${L-4}" y="9" text-anchor="end" font-size="10" fill="var(--mute)">${vU()}</text>`;
+  const nowDot=curV!=null?`<circle cx="${X(nowMs).toFixed(1)}" cy="${Y(curV).toFixed(1)}" r="4.5" fill="var(--ink)"/>`:'';
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Estimated sealant left, in ${vU()}, over time, with refills, punctures and removals marked and a dotted line showing where it is heading" style="display:block">${trNoRec(t0,segs[0].dateMs,X,L,T,H,B)}${grid}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--line)"/>${trRides(t0,X,H,B)}<path d="${ln(pts)}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${pr.length?`<path d="${ln(pr)}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>`:''}${mk}${nowDot}${trDates(t0,span,X,H,W,R)}</svg>`;
   const has=k=>ch.some(c=>c.k===k&&c.ms>=t0);
-  const legend=['<span>▲ refill</span>',has('puncture')?'<span style="color:var(--red)">●</span> puncture sealed or plugged':'',has('removed')?'<span>○</span> sealant removed':'',has('check')?'<span>◆</span> sealant check':''].filter(Boolean).join(' · ');
+  const legend=['<span>▲ refill</span>','<span>| ride</span>',has('puncture')?'<span style="color:var(--red)">●</span> puncture sealed or plugged':'',has('removed')?'<span>○</span> sealant removed':'',has('check')?'<span>◆</span> sealant check':''].filter(Boolean).join(' · ');
   const lab={start:'Sealant put in',refill:'Sealant added',puncture:'Puncture',removed:'Sealant removed',check:'Sealant checked'};
   const rows=ch.slice(0,12).map(c=>`<tr><td>${fmtD(c.ms)}</td><td>${lab[c.k]}${c.sub&&c.sub!=='sealed'&&c.sub!=='removed'?' ('+esc(c.sub)+')':''}${c.brand?' · '+esc(c.brand):''}</td><td>${c.k==='check'?esc(c.lv||''):(c.ml!=null?(c.k==='puncture'||c.k==='removed'?'−':'+')+vR(c.ml)+' '+vU():'')}</td></tr>`).join('');
-  return `<div class="card"><h3 style="margin-top:0">Sealant left</h3>${svg}<p class="mute" style="margin:4px 0 0">Share of a full dose left, over time. ${legend}</p></div>
-  <div class="card"><h3 style="margin-top:0">Sealant changes</h3><div class="scroll"><table><thead><tr><th>Date</th><th>What</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table></div>${(t.sealHist||[]).length?'':'<p class="mute" style="margin:6px 0 0">Earlier refills from before this update were not kept. From now on every refill stays on the chart.</p>'}</div>`}
+  const un=v=>tl(v)+' '+vU();
+  const eta=curV==null?'':etaD===0?'Already at or below the refill line.':etaD!=null?`At this rate it reaches the refill line in about ${etaD} day${etaD===1?'':'s'} (around ${fmtD(nowMs+etaD*DAY)}), if you ride about the same.`:'No refill needed in the next year at this rate.';
+  const past=`<div class="card"><h3 style="margin-top:0">Add an earlier refill</h3><p class="mute" style="margin:0 0 8px">Put back sealant you used before the app kept this history. It adds a segment to the chart before your current refill.</p>
+  <div class="row"><div><label for="sp_d">Date</label><input id="sp_d" type="date"></div><div><label for="sp_a">Amount put in, ${vU()}</label><input id="sp_a" type="number" step="0.1" placeholder="e.g. ${US()?2:60}"></div></div>
+  <label for="sp_b">Brand</label><input id="sp_b" data-sg="sealant" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="Type to search" value="${esc(t.sealant.brand||'')}">
+  <div style="margin-top:8px"><button data-act="sealpast" data-i="${trI}">Add to ${t.wheel==='front'?'front':'rear'} history</button></div><p class="mute" id="spmsg" aria-live="polite" style="margin:8px 0 0">${esc(msg.sp||'')}</p></div>`;
+  return `<div class="card"><h3 style="margin-top:0">Sealant left</h3>${svg}<p class="mute" style="margin:4px 0 0">Solid line: estimate. Dotted: where it is heading. Dashed lines: full dose and the refill level. ${legend}</p></div>
+  <div class="stat"><span class="mute">Estimate now</span><br><b>${curV!=null?un(curV):'unknown'}</b></div>
+  <div class="stat"><span class="mute">Refill level (${Math.round((S.a.triggerFraction||0.4)*100)}% of a full dose)</span><br><b>${un(trig)}</b></div>
+  ${eta?`<div class="stat" style="background:var(--line)"><span class="mute">${eta} Heat, rides and punctures change this, so check the sealant by hand.</span></div>`:''}
+  <div class="card"><h3 style="margin-top:0">Sealant changes</h3><div class="scroll"><table><thead><tr><th>Date</th><th>What</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table></div>${(t.sealHist||[]).length?'':'<p class="mute" style="margin:6px 0 0">Earlier refills from before this update were not kept. From now on every refill stays on the chart, or add them below.</p>'}</div>${past}`}
 function viewTrends(){
   const t=S.tires[trI]||S.tires[0],nowMs=Date.now();
   const km=S.rides.filter(r=>r.startMs>=t.sealant.dateMs).reduce((a,r)=>a+(r.km||0),0);
   return `<h2>Trends</h2>${segBar(S.tires.map((q,i)=>[i,q.wheel==='front'?'Front':'Rear']),trI,'data-tr')}
+  <div style="margin-top:8px">${segBar([['w','Week'],['m','Month'],['q','3 months'],['y','Year'],['all','All']],trRange,'data-trr')}</div>
   ${airTrendCard(t)}
   ${sealTrendCard(t)}
   <div class="stat"><span class="mute">Last refill</span><br><b>${fmtD(t.sealant.dateMs)}</b></div>
@@ -1378,6 +1407,7 @@ document.addEventListener('click',async ev=>{
   const ph=ev.target.closest('[data-ph]');if(ph){const g=ph.dataset.ph.split(':'),d=pdraft(+g[0]);d.hole=+g[1];d.ml=null;render(true);return}
   const sg=ev.target.closest('[data-stab]');if(sg){stab=sg.dataset.stab;render();window.scrollTo(0,0);return}
   const tg=ev.target.closest('[data-tr]');if(tg){trI=+tg.dataset.tr;render();return}
+  const tr2=ev.target.closest('[data-trr]');if(tr2){trRange=tr2.dataset.trr;render();return}
   const gt=ev.target.closest('[data-goto]');if(gt){const g=gt.dataset.goto.split(':');tab=g[0];if(g[1])stab=g[1];detail=null;render();window.scrollTo(0,0);return}
   const tb=ev.target.closest('[data-tab]');if(tb){tab=tb.dataset.tab;detail=null;render();window.scrollTo(0,0);return}
   const b=ev.target.closest('[data-act]');if(!b)return;const act=b.dataset.act;
@@ -1440,6 +1470,12 @@ document.addEventListener('click',async ev=>{
     t.fills.push({dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.gauge='Saved. The estimate now starts from '+v+' PSI.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render(true)}
   else if(act==='logair'){const t=tire(),af=parseFloat($('#la').value),be=parseFloat($('#lb').value);if(isNaN(af)&&isNaN(be)){msg.log='Enter the reading or the pressure after filling.';return render()}
     t.fills.push({dateMs:dateMs(),beforePsi:isNaN(be)?null:be,afterPsi:isNaN(af)?be:af,fillC:(()=>{const x=parseFloat($('#lc').value);return isNaN(x)?20:tC(x)})(),altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.log='Air entry saved.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render()}
+  else if(act==='sealpast'){const i=+b.dataset.i,t=S.tires[i],dv=$('#sp_d').value,ml=vIn(parseFloat($('#sp_a').value)),br=($('#sp_b').value||'').trim();
+    if(!dv||!(ml>0)){msg.sp='Enter the date and how much sealant went in.';return render(true)}
+    const d=toMs(dv);if(d>=t.sealant.dateMs){msg.sp='That is not before your current refill ('+fmtD(t.sealant.dateMs)+'). Use Log, Sealant added for a newer one.';return render(true)}
+    t.sealHist=t.sealHist||[];if(t.sealHist.some(h=>Math.abs(h.dateMs-d)<DAY&&h.brand===br)){msg.sp='That refill is already in the history.';return render(true)}
+    t.sealHist.push({brand:br,ml:Math.round(ml),dateMs:d,events:[],endMs:null,addedMl:Math.round(ml*10)/10});t.sealHist.sort((a,c)=>a.dateMs-c.dateMs);t.sealHist.forEach((h,k)=>{h.endMs=k<t.sealHist.length-1?t.sealHist[k+1].dateMs:t.sealant.dateMs});
+    if(br)addCustomSealant(br);msg.sp='Added. The chart now starts from '+fmtD(t.sealHist[0].dateMs)+'.';save();render()}
   else if(act==='logcheck'){tire().checks.push({dateMs:dateMs(),level:$('#ll').value});msg.log='Sealant check saved. The life estimate has been adjusted.';save();render()}
   else if(act==='airout'){const i=+b.dataset.i,t=S.tires[i],x=tireStatus(t),amt=parseFloat($('#ao'+i).value);
     if(!x.ar.known){msg['a'+i]='Log a fill or a gauge reading first.';return render(true)}

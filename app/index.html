@@ -918,7 +918,7 @@ const STABS=[['bike','Bike'],['data','Data'],['log','Log'],['model','Model']];
 function segBar(items,cur,attr){return `<div class="seg" role="tablist">${items.map(([v,l])=>`<button ${attr}="${v}" aria-current="${String(v)===String(cur)}">${l}</button>`).join('')}</div>`}
 function bikeName(){return (S.rider&&S.rider.bikeName)||'My bike'}
 function bikeBar(){return `<div class="bikesel" data-goto="settings:bike" role="button" tabindex="0" aria-label="Bike: ${esc(bikeName())}. Tap to change"><span>${esc(bikeName())}</span><span aria-hidden="true">▾</span></div><p class="mute" style="margin:6px 0 2px">Estimated just now · ${S.rides.length} ride${S.rides.length===1?'':'s'} on file</p>`}
-function airZones(A){const tgt=A.tgt,g1=tgt*1.05,over=isFinite(A.lim)?A.lim:tgt*1.25;return {tgt,low:tgt*0.80,good0:tgt*0.90,good1:g1,over:Math.max(over,g1+2)}}
+function airZones(A){const tgt=A.tgt,lim=isFinite(A.lim)?A.lim:null,g1=lim!=null?Math.min(tgt*1.05,lim):tgt*1.05,over=lim!=null?lim:Math.max(tgt*1.25,g1+2);return {tgt,low:tgt*0.80,good0:tgt*0.90,good1:g1,over}}
 function tireStatus(t){
   const A=advice(t),ar=A.air,sl=A.sealant,Z=airZones(A),airRed=ar.known&&(ar.needAir||ar.tooHigh),sealRed=!!sl.needAdd,overfilled=ar.known&&ar.estPsi>Z.over;
   const tg=Math.round(ar.tgt*10)/10;

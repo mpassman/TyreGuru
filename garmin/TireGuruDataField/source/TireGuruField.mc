@@ -76,12 +76,16 @@ class TireGuruField extends WatchUi.DataField {
 
     // Air thresholds, same as the app. Returns [low, good0, good1, over, dialMax]
     // Good is target -10% to +5%. OK (yellow) is 10% to 20% below. Low is more than 20% below. High is above +5%.
-    // Overfilled is above the tire maximum (or target + 25% when no maximum is set).
+    // Purple (high) is above green but still under the tire maximum. Overfilled is above the maximum (or target + 25% when no maximum is set).
     function airZones(tgt) {
         var g1 = tgt * 1.05;
         var over = tgt * 1.25;
-        if (maxPsi > 0.0) { over = maxPsi; }
-        if (over < g1 + 2.0) { over = g1 + 2.0; }
+        if (maxPsi > 0.0) {
+            over = maxPsi;
+            if (g1 > over) { g1 = over; }
+        } else if (over < g1 + 2.0) {
+            over = g1 + 2.0;
+        }
         var dmax = 180.0;
         if (over <= 52.0) {
             dmax = 60.0;

@@ -1,0 +1,276 @@
+{
+ "version": 1,
+ "updated": "2026-11-09",
+ "note": "Maximum tire pressure (psi) by brand, model and nominal width. The sidewall of the tire is the authority. Entries added by the research job carry src \"researched\" and a srcUrl, and are merged only after a person reviews the pull request.",
+ "tires": [
+  {
+   "brand": "pirelli",
+   "model": "p zero race tlr 4s",
+   "nominal": 28,
+   "psi": 94,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "pirelli",
+   "model": "p zero race tlr 4s",
+   "nominal": 32,
+   "psi": 80,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "pirelli",
+   "model": "p zero race tlr sl r",
+   "nominal": 28,
+   "psi": 94,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "pirelli",
+   "model": "p zero race tlr rs",
+   "nominal": 30,
+   "psi": 94,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "pirelli",
+   "model": "cinturato gravel m",
+   "nominal": 40,
+   "psi": 58,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "pirelli",
+   "model": "cinturato gravel m",
+   "nominal": 45,
+   "psi": 65,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "grand prix 5000 s tr",
+   "nominal": 25,
+   "psi": 109,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "grand prix 5000 s tr",
+   "nominal": 28,
+   "psi": 94,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "grand prix 5000 s tr",
+   "nominal": 30,
+   "psi": 73,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "grand prix 5000 s tr",
+   "nominal": 32,
+   "psi": 73,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "gp5000 s tr",
+   "nominal": 25,
+   "psi": 109,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "gp5000 s tr",
+   "nominal": 28,
+   "psi": 94,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "gp5000 s tr",
+   "nominal": 30,
+   "psi": 73,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "gp5000 s tr",
+   "nominal": 32,
+   "psi": 73,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "grand prix 5000 as tr",
+   "nominal": 28,
+   "psi": 94,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "gp5000 as tr",
+   "nominal": 28,
+   "psi": 94,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "terra speed tr",
+   "nominal": 35,
+   "psi": 73,
+   "src": "bicyclerollingresistance.com",
+   "not": [
+    "e 25"
+   ],
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "continental",
+   "model": "terra speed tr",
+   "nominal": 45,
+   "psi": 73,
+   "src": "bicyclerollingresistance.com",
+   "not": [
+    "e 25"
+   ],
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "schwalbe",
+   "model": "pro one tle addix",
+   "nominal": 25,
+   "psi": 110,
+   "src": "bicyclerollingresistance.com",
+   "not": [
+    "aero",
+    "tt",
+    "tube"
+   ],
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "schwalbe",
+   "model": "g one rs pro",
+   "nominal": 40,
+   "psi": 65,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "schwalbe",
+   "model": "g one rs pro",
+   "nominal": 45,
+   "psi": 55,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "vittoria",
+   "model": "corsa pro tlr",
+   "nominal": 28,
+   "psi": 95,
+   "src": "bicyclerollingresistance.com",
+   "not": [
+    "control",
+    "speed",
+    "tube"
+   ],
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "specialized",
+   "model": "turbo 2bliss ready t2 t5",
+   "nominal": 28,
+   "psi": 95,
+   "src": "bicyclerollingresistance.com",
+   "not": [
+    "rapidair"
+   ],
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "specialized",
+   "model": "pathfinder pro 2bliss ready",
+   "nominal": 38,
+   "psi": 80,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "specialized",
+   "model": "pathfinder pro 2bliss ready",
+   "nominal": 42,
+   "psi": 80,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "michelin",
+   "model": "power cup tlr",
+   "nominal": 28,
+   "psi": 102,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "goodyear",
+   "model": "eagle f1 supersport r",
+   "nominal": 28,
+   "psi": 85,
+   "src": "bicyclerollingresistance.com",
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "maxxis",
+   "model": "aspen st maxxspeed exo tr team spec",
+   "nominal": 61,
+   "psi": 50,
+   "src": "bicyclerollingresistance.com",
+   "tol": 1,
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "maxxis",
+   "model": "aspen exo tr",
+   "nominal": 57,
+   "psi": 60,
+   "src": "bicyclerollingresistance.com",
+   "not": [
+    "st",
+    "maxxspeed"
+   ],
+   "tol": 1,
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  },
+  {
+   "brand": "maxxis",
+   "model": "rekon race exo tr",
+   "nominal": 57,
+   "psi": 60,
+   "src": "bicyclerollingresistance.com",
+   "not": [
+    "maxxspeed"
+   ],
+   "tol": 1,
+   "srcUrl": "https://www.bicyclerollingresistance.com/"
+  }
+ ]
+}

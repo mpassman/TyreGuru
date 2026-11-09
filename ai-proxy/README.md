@@ -18,6 +18,9 @@ The app sends the review text; the Worker adds your Anthropic key (stored only i
 
 Or skip the command line: in the Cloudflare dashboard create a Worker, paste `worker.js`, add the secrets under Settings, Variables.
 
+## New-product submissions (optional)
+The same Worker accepts tires and sealants riders add that are not on the list and files them as GitHub issues for the research job (see the main README). To switch it on, create a GitHub token that can create issues in your repository (fine-grained, "Issues: read and write", this repository only) and run `npx wrangler secret put GITHUB_TOKEN`. Until then the app keeps the additions waiting and shows "waiting for the service to be switched on". Limits: 10 per device and 50 per day (`PER_IP_SUBMIT`, `DAILY_SUBMIT_LIMIT`).
+
 ## Safeguards built in
 - Key lives only in Cloudflare secrets, never in the app or this repo.
 - Only TyreGuru review prompts are accepted (checked signature, 12,000 character cap, 500 token answer cap).

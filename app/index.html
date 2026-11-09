@@ -26,6 +26,7 @@ html[data-cb="1"]{--zl:#d55e00;--zo:#f0e442;--zg:#0072b2;--zh:#cc79a7;--tl:#ff9a
 .wrap{max-width:760px;margin:0 auto}h1,h2,h3{font-family:var(--disp);letter-spacing:.02em;margin:0;text-wrap:balance}
 h1{font-size:30px}h2{font-size:22px;margin-bottom:8px}h3{font-size:17px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:16px 0 6px}
 .top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0}
+.sg{position:fixed;z-index:60;background:var(--card);color:inherit;border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.45);overflow-y:auto;-webkit-overflow-scrolling:touch}.sg [role=option]{padding:11px 14px;min-height:44px;box-sizing:border-box;display:flex;align-items:center;border-top:1px solid var(--line);font-size:16px}.sg [role=option]:first-child{border-top:0}.sg .add{font-weight:600}.sg .note{padding:12px 14px;font-size:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0;min-width:0}
 .big{border-width:2px}.big.red{border-color:var(--red);background:#000}.big.green{border-color:var(--green);background:#000}
 .tag{display:inline-block;font:700 13px var(--disp);letter-spacing:.1em;text-transform:uppercase;padding:2px 9px;border-radius:4px;color:#fff}
@@ -615,7 +616,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-09 h';
+const BUILD='2026-11-09 i';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -790,13 +791,13 @@ function viewHome(){
 function tireForm(t){
   const i=S.tires.indexOf(t),n=`t${i}`,same=t.wheel==='rear'&&S.rearSame!==false,sameS=t.wheel==='rear'&&S.sealSame!==false;
   return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">${t.wheel==='front'?'Front':'Rear'} tire</h2><span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${t.wheel==='rear'?`<select aria-label="Rear tire choice" data-rs="1"><option value="1" ${S.rearSame!==false?'selected':''}>Same as front</option><option value="0" ${S.rearSame===false?'selected':''}>Different from front</option></select>`:''}<button class="ghost" data-act="chg" data-i="${i}">I put on a new tire</button></span></div>${same?`<p class="mute">Same tire as the front: <b>${esc(t.brand)} ${esc(t.model||'')}</b>, ${t.type}, ${t.nominalMm} mm printed, ${t.widthMm} mm measured, ${t.maxPsi>0?t.maxPsi+' PSI maximum':'no tire maximum entered'}${t.hookless?', hookless rim':''}. To change these, edit the front tire or choose Different from front.</p>`:`<div class="row">
-  <div><label for="${n}b">Tire brand</label><input id="${n}b" list="dl-brand" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" data-f="tires.${i}.brand" value="${esc(t.brand)}" placeholder="e.g. Pirelli"></div>
-  <div><label for="${n}m">Model</label><input id="${n}m" list="dl-model" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" data-f="tires.${i}.model" value="${esc(t.model||'')}" placeholder="e.g. P Zero Race TLR 4S"></div>
+  <div><label for="${n}b">Tire brand</label><input id="${n}b" data-sg="brand" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" data-f="tires.${i}.brand" value="${esc(t.brand)}" placeholder="e.g. Pirelli"></div>
+  <div><label for="${n}m">Model</label><input id="${n}m" data-sg="model" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" data-f="tires.${i}.model" value="${esc(t.model||'')}" placeholder="e.g. P Zero Race TLR 4S"></div>
   <div><label for="${n}y">Tire type</label><select id="${n}y" data-f="tires.${i}.type">${[['road','Road'],['gravel','Gravel'],['mtb','Mountain bike']].map(([v,l])=>`<option value="${v}" ${t.type===v?'selected':''}>${l}</option>`).join('')}</select></div>
   <div><label for="${n}w">Measured width, mm</label><input id="${n}w" type="number" data-f="tires.${i}.widthMm" value="${t.widthMm}"></div>
   <div><label for="${n}nw">Printed (nominal) width, mm. Mountain bike: ETRTO number, e.g. 61 for 2.4 in</label><input id="${n}nw" type="number" data-f="tires.${i}.nominalMm" value="${t.nominalMm||''}"></div>
   <div><label for="${n}r">Rim inner width, mm</label><input id="${n}r" type="number" data-f="tires.${i}.rimMm" value="${t.rimMm}"></div></div>
-  <p class="mute" style="margin:4px 0">Tire not in the list? Type its brand and model, then the printed width and the maximum pressure on the sidewall. The app adds it to your own tire list and remembers that maximum. <a href="https://www.google.com/search?q=${encodeURIComponent(((t.brand||'')+' '+(t.model||'')+' '+(t.nominalMm||'')+' mm tire maximum pressure psi').trim())}" target="_blank" rel="noopener">Search the web for this tire</a></p>`}
+  <p class="mute" style="margin:4px 0">Tire not in the list? Type its brand and model and the printed width, then tap “Not listed? Add it” in the suggestions. The app adds it to your own list, and (if you allow it on the Data tab) sends the brand, model and width so it can be looked up online and added for everyone. Enter the maximum pressure from the sidewall below. <a href="https://www.google.com/search?q=${encodeURIComponent(((t.brand||'')+' '+(t.model||'')+' '+(t.nominalMm||'')+' mm tire maximum pressure psi').trim())}" target="_blank" rel="noopener">Search the web for this tire</a></p>`}
   <div class="row"><div><label for="${n}i">Tire installed on</label><input id="${n}i" type="date" data-d="tires.${i}.installMs" value="${fmtD(t.installMs)}"></div>
   <div><label for="${n}c">Tire condition</label><select id="${n}c" data-f="tires.${i}.condition">${['auto','new','good','fair','poor'].map(c=>`<option value="${c}" ${t.condition===c?'selected':''}>${c==='auto'?'Automatic, from install date and mileage':c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}</select></div></div>
   ${(()=>{const w=wear(t);const mo=Math.round(w.days/30.4);return `<p class="mute">Condition is worked out from the install date and the rides since then (from Strava, Garmin files, Apple Health, Intervals.icu or rides you log). ${dR(w.km)} ${dU()} ridden since ${fmtD(t.installMs)}: ${Math.round(w.f*100)}% of an assumed ${dR(w.life)} ${dU()} life for a ${t.type==='mtb'?'mountain bike':t.type} tire. Installed ${mo===1?'1 month':mo+' months'} ago: ${Math.round(w.fa*100)}% of an assumed ${Math.round(LIFE_DAYS/365)} year age limit. The higher of the two sets the condition, which is ${w.cond}${w.manual?' (set by you)':(w.cond==='new'?'':` (driven by ${w.by})`)}. These tire lives are rough assumptions, not tested.${w.noKm?` ${w.noKm} rides have no distance and are not counted.`:''}${S.rides.length===0?' Connect Strava or import rides in Settings, Data so mileage counts.':''}</p>`})()}
@@ -805,7 +806,7 @@ function tireForm(t){
   <div><label for="${n}h">Rim type</label><select id="${n}h" data-f="tires.${i}.hookless"><option value="" ${!t.hookless?'selected':''}>Hooked or not sure</option><option value="1" ${t.hookless?'selected':''}>Hookless (ETRTO limit by tire width)</option></select></div></div>`}
   <p class="mute">${(()=>{const e=lookupMax(t);return t.maxAuto&&e?`Tire maximum filled in from the app's tire list for ${esc(t.brand)} ${esc(t.model)} at ${t.nominalMm} mm (source: ${e.src}). Confirm it against the sidewall of your tire.`:(t.maxPsi>0?'Tire maximum entered by you.':'This tire is not in the app\'s list yet. Enter the maximum pressure printed on the sidewall.')})()}</p>
   <p class="mute">Limits applied automatically: the tire maximum above, and for hookless rims the ETRTO limit for the printed width. The app does not check the rim's own maximum, because no ETRTO figure for hooked rims was found. Check the label on your rim.</p>
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h3 style="margin:0">Sealant in this tire</h3>${t.wheel==='rear'?`<select aria-label="Rear sealant choice" data-ss="1"><option value="1" ${S.sealSame!==false?'selected':''}>Same as front</option><option value="0" ${S.sealSame===false?'selected':''}>Different from front</option></select>`:''}</div>${sameS?`<p class="mute">Same sealant as the front: <b>${esc(t.sealant.brand||'brand not set')}</b>, ${vfmt(t.sealant.ml)}, applied ${fmtD(t.sealant.dateMs)}. To change it, edit the front tire's sealant or choose Different from front.</p>`:`<div class="row"><div><label for="${n}sb">Sealant brand</label><input id="${n}sb" list="dl-sealant" data-f="tires.${i}.sealant.brand" data-cs="1" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" value="${esc(t.sealant.brand||'')}" placeholder="Type to search, or add your own"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h3 style="margin:0">Sealant in this tire</h3>${t.wheel==='rear'?`<select aria-label="Rear sealant choice" data-ss="1"><option value="1" ${S.sealSame!==false?'selected':''}>Same as front</option><option value="0" ${S.sealSame===false?'selected':''}>Different from front</option></select>`:''}</div>${sameS?`<p class="mute">Same sealant as the front: <b>${esc(t.sealant.brand||'brand not set')}</b>, ${vfmt(t.sealant.ml)}, applied ${fmtD(t.sealant.dateMs)}. To change it, edit the front tire's sealant or choose Different from front.</p>`:`<div class="row"><div><label for="${n}sb">Sealant brand</label><input id="${n}sb" data-sg="sealant" data-f="tires.${i}.sealant.brand" data-cs="1" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" value="${esc(t.sealant.brand||'')}" placeholder="Type to search, or add your own"></div>
   <div><label for="${n}sd">Date last applied</label><input id="${n}sd" type="date" data-d="tires.${i}.sealant.dateMs" value="${fmtD(t.sealant.dateMs)}"></div>
   <div><label for="${n}sm">Amount put in, ${vU()}</label><input id="${n}sm" type="number" step="${US()?0.1:1}" data-sv="tires.${i}.sealant.ml" value="${vR(t.sealant.ml)}"></div></div>`}
   <p class="mute" style="margin:4px 0">Type to search the list. A sealant that is not listed is added to your own list when you finish typing it. The app uses a generic amount until you set the amount above, so follow the label on the bottle. <a href="https://www.google.com/search?q=${encodeURIComponent((t.sealant.brand||'tubeless sealant')+' how much sealant per tire maximum puncture size')}" target="_blank" rel="noopener">Search the web for this sealant</a></p>
@@ -813,14 +814,14 @@ function tireForm(t){
   ${(()=>{const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type);const how=d.src==='maker'?'from the maker\'s chart':(d.src==='secondary'?'from a second-hand report of the maker\'s advice, not verified':'a generic estimate, no maker amount found');return `<p class="mute">Full dose for ${t.widthMm} mm${d.product?' with '+esc(d.product):''}: ${vfmt(TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel))}${t.doseLevel==='light'?' (Light Race)':''}, ${how}. ${esc(d.note)} Tire casings vary, so follow your sealant label.${d.half&&d.chk?` Check the sealant about every ${d.chk} months. To top up, add about half a full dose (${vfmt(d.half)}); that half-dose rule is a common rule of thumb, not a maker figure.`:''}${d.initEst?` For a NEW tire, start with about ${vfmt(d.init)}. New tires soak up sealant, and Silca's own charts call for roughly 10 to 20% more on the first fill (an estimate for this sealant). After that the full dose above applies.`:` For a NEW tire, Silca's initial fill is ${vfmt(d.init)} (new tires soak up sealant); after that the full dose above applies.`}${d.rep?` Silca Replenisher for this width: 1st top-up ${vfmt(d.rep[0])}, 2nd ${vfmt(d.rep[1])}, 3rd ${vfmt(d.rep[2])}.`:''}${d.url?` <a href="${d.url}" target="_blank" rel="noopener">Source</a>`:''}</p>`})()}</div>`;
 }
 const cap=x=>x.replace(/\b\w/g,c=>c.toUpperCase());
-function datalists(){const b=[...new Set(TIRE_DB.map(e=>cap(e.brand)).concat(cust().tires.map(e=>e.brand)))],m=[...new Set(TIRE_DB.map(e=>cap(e.model)).concat(cust().tires.map(e=>e.model).filter(Boolean)))];return `<datalist id="dl-sealant">${sealantNames().map(x=>`<option value="${esc(x)}">`).join('')}</datalist><datalist id="dl-brand">${b.map(x=>`<option value="${esc(x)}">`).join('')}</datalist><datalist id="dl-model">${m.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`}
+function datalists(){return ''}   // suggestions are drawn by our own dropdown (sgShow), because the phone's built-in list does not show reliably
 function changeForm(i){
   const t=S.tires[i];
   return `<div class="card" style="border:2px solid var(--frame)"><h2>New ${t.wheel} tire</h2><p class="mute" style="margin-top:0">Enter the tire you just put on. The old tire is saved to your tire history with its mileage. The new tire starts with a clean sealant, air and wear record.</p>
-  <div class="row"><div><label for="c_b">Brand</label><input id="c_b" list="dl-brand" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="e.g. Pirelli"></div><div><label for="c_m">Model</label><input id="c_m" list="dl-model" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="e.g. P Zero Race TLR 4S"></div>
+  <div class="row"><div><label for="c_b">Brand</label><input id="c_b" data-sg="brand" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="e.g. Pirelli"></div><div><label for="c_m">Model</label><input id="c_m" data-sg="model" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="e.g. P Zero Race TLR 4S"></div>
   <div><label for="c_y">Tire type</label><select id="c_y"><option value="">Automatic, from model and width</option><option value="road">Road</option><option value="gravel">Gravel</option><option value="mtb">Mountain bike</option></select></div></div>
   <div class="row"><div><label for="c_n">Printed width, mm</label><input id="c_n" type="number" placeholder="e.g. 32"></div><div><label for="c_w">Measured width, mm</label><input id="c_w" type="number" placeholder="e.g. 31"></div><div><label for="c_d">Installed on</label><input id="c_d" type="date" value="${fmtD(Date.now())}"></div></div>
-  <div class="row"><div><label for="c_sb">Sealant brand</label><input id="c_sb" list="dl-sealant" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="Type to search, or add your own"></div><div><label for="c_sm">Sealant put in, ${vU()}</label><input id="c_sm" type="number" step="0.1" placeholder="e.g. ${US()?2:60}"></div></div>
+  <div class="row"><div><label for="c_sb">Sealant brand</label><input id="c_sb" data-sg="sealant" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="Type to search, or add your own"></div><div><label for="c_sm">Sealant put in, ${vU()}</label><input id="c_sm" type="number" step="0.1" placeholder="e.g. ${US()?2:60}"></div></div>
   <p class="mute" id="cmsg" aria-live="polite">${esc(msg.chg||'')}</p>
   <div style="display:flex;gap:6px;flex-wrap:wrap"><button data-act="chgsave" data-i="${i}">Save new tire</button><button class="ghost" data-act="chgcancel">Cancel</button></div></div>`;
 }
@@ -854,9 +855,11 @@ const aiUrl=()=>((aiS().url||AI_URL_DEFAULT)+'').trim().replace(/\/+$/,'');
 async function aiProxy(path,opt){const x=aiS();const h=Object.assign({'Content-Type':'application/json'},x.code?{'X-TyreGuru-Code':x.code}:{});
   const r=await net(aiUrl()+path,Object.assign({headers:h},opt||{}));let j=null;try{j=JSON.parse(r.text)}catch(e){}return {status:r.status,j}}
 function aiServiceCard(){const x=aiS(),m=msg.aisvc||'';
-  return `<div class="card"><h2>AI review service</h2><p class="mute" style="margin-top:0">The Ask the AI button on Home works inside Claude. To use it from this app by itself, deploy the small service in the <code>ai-proxy</code> folder of the TyreGuru repository and paste its address here. The service holds the Anthropic key, never this app. With no address set, or no key added to the service yet, the button just says it is not switched on and everything else works as normal.</p>
+  return `<div class="card"><h2>AI review and shared list service</h2><p class="mute" style="margin-top:0">The Ask the AI button on Home works inside Claude. To use it from this app by itself, deploy the small service in the <code>ai-proxy</code> folder of the TyreGuru repository and paste its address here. The service holds the Anthropic key, never this app. With no address set, or no key added to the service yet, the button just says it is not switched on and everything else works as normal. The same service takes the tires and sealants you add that are not on the list (tap “Not listed? Add it” in a brand, model or sealant box), so they can be looked up online and added for everyone after a person checks them.</p>
   <label for="aiu">Service address</label><input id="aiu" data-aiu="1" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="https://tyreguru-ai.yourname.workers.dev" value="${esc(x.url||'')}">
   <label for="aic" style="margin-top:8px">Access code (only if you set one)</label><input id="aic" data-aic="1" type="password" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(x.code||'')}">
+  <label for="shr" style="margin-top:8px">Send tires and sealants I add to the shared list</label><select id="shr" data-shr="1"><option value="1"${subQ().on!==false?' selected':''}>Yes</option><option value="0"${subQ().on===false?' selected':''}>No, keep them on this device</option></select>
+  <p class="mute" style="margin:6px 0 0">${(()=>{const l=subQ().list,w=l.filter(x=>!x.sent),sn=l.length-w.length;return l.length?`${sn} sent, ${w.length} waiting${w.length&&w[0].err?' ('+esc(w[0].err)+')':''}.`:'Nothing added yet.'})()} What is sent: the brand, model, printed width and maximum pressure you entered for a tire, or the sealant name. Nothing about you, your rides or your location.</p>
   <div style="margin-top:8px"><button data-act="aitest"${aiUrl()?'':' disabled'}>Test the service</button></div>
   <p class="mute" id="aimsg" aria-live="polite" style="margin:8px 0 0">${esc(m)}</p>
   <p class="mute" style="margin:6px 0 0">Your address and code stay on this device and are left out of backups. When you press Ask the AI, the review text (your tires, sealant and air estimates and recent ride summaries from your own files) is sent to the service and on to Anthropic. Nothing from Strava or other connected services is ever included.</p></div>`}
@@ -1000,7 +1003,7 @@ function viewLog(){
   <button data-act="logair" style="margin-top:8px">Save air entry</button>
   <h3>Sealant</h3><div class="row"><div><label for="ll">What you saw or felt</label><select id="ll"><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div></div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button data-act="logcheck">Save sealant check</button><button class="ghost" data-goto="settings:punct">Log a puncture or flat</button></div>
-  <div class="row" style="margin-top:8px"><div><label for="am">Sealant added, ${vU()}</label><input id="am" type="number" step="0.1" placeholder="e.g. ${US()?1:30}"></div><div><label for="ab">Brand added</label><input id="ab" list="dl-sealant" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="Type to search, or add your own"></div><div style="align-self:end"><button data-act="logadd">Save sealant added</button></div></div>
+  <div class="row" style="margin-top:8px"><div><label for="am">Sealant added, ${vU()}</label><input id="am" type="number" step="0.1" placeholder="e.g. ${US()?1:30}"></div><div><label for="ab">Brand added</label><input id="ab" data-sg="sealant" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="Type to search, or add your own"></div><div style="align-self:end"><button data-act="logadd">Save sealant added</button></div></div>
   <p class="mute" id="gmsg" aria-live="polite">${esc(msg.log||'')}</p></div>
   ${S.tires.map((t,i)=>adjustCard(i)).join('')}
   <div class="card"><h2>History</h2>${hist.length?`<div class="scroll"><table><tbody>${hist.slice(0,15).map(h=>`<tr><td>${fmtD(h[0])}</td><td>${h[1]}</td><td>${esc(h[2])}</td></tr>`).join('')}</tbody></table></div>`:'<p class="mute">Nothing logged yet.</p>'}</div>`;
@@ -1451,7 +1454,7 @@ document.addEventListener('click',async ev=>{
 document.addEventListener('focusin',ev=>{const e=ev.target;if(e&&e.tagName==='INPUT'&&e.list){setTimeout(()=>{if(S.example&&/^Example/.test(e.value)){try{e.setSelectionRange(0,e.value.length)}catch(_){}}},0)}});
 document.addEventListener('input',ev=>{
   const e=ev.target;
-  if(e&&e.dataset&&(e.dataset.aiu||e.dataset.aic)){const x=aiS();if(e.dataset.aiu)x.url=e.value.trim();else x.code=e.value.trim();save();const bt=document.querySelector('[data-act=aitest]');if(bt)bt.disabled=!aiUrl();return}
+  if(e&&e.dataset&&(e.dataset.aiu||e.dataset.aic)){const x=aiS();if(e.dataset.aiu)x.url=e.value.trim();else x.code=e.value.trim();save();flushSubs();const bt=document.querySelector('[data-act=aitest]');if(bt)bt.disabled=!aiUrl();return}
   if(e&&e.dataset&&e.dataset.tk){trf().key=e.value.trim();save();const bt=document.querySelector('[data-act=trafficnow]');if(bt)bt.disabled=!(trf().key&&S.home);return}
   if(e&&e.dataset&&e.dataset.pml!==undefined){const d=pdraft(+e.dataset.pml),x=parseFloat(e.value);d.ml=isNaN(x)?null:vIn(x);return}
   /* brand field: typing a space finishes the word from the brand list ("P" + space becomes "Pirelli ") */
@@ -1482,6 +1485,7 @@ document.addEventListener('input',ev=>{
 });
 document.addEventListener('change',ev=>{const e=ev.target;if(e.dataset&&e.dataset.cs){const added=addCustomSealant(e.value);if(added){save();render(true)}return}
   if(e.dataset&&e.dataset.f){const tm=/^tires\.(\d+)\.(brand|model|maxPsi|nominalMm)$/.exec(e.dataset.f);if(tm&&S.tires[+tm[1]]&&addCustomTire(S.tires[+tm[1]])){save();render(true)}}
+  if(e.dataset&&e.dataset.shr){subQ().on=e.value==='1';save();render(true);return}
   if(e.dataset&&e.dataset.tn){trf().on=e.value==='1';save();if(!trf().on){if(now.roadBaseC!=null)now.roadC=now.roadBaseC;now.roadBaseC=null;now.traffic=null}if(trf().on&&trf().key&&S.home)fetchNow();else render(true);return}if(e.dataset&&e.dataset.pk!==undefined){const d=pdraft(+e.dataset.pk);d.kind=e.value;d.ml=null;render(true);return}if(e.dataset&&e.dataset.exp){exp[e.dataset.exp]=!!e.checked;exp.csv='';render(true);return}if(e.dataset&&e.dataset.alv){const a=AL(),k=e.dataset.alv;a[k]=(k==='mode'||k==='cue'||k==='where')?e.value:e.value==='1';if(k==='danger'&&!a.danger)alStop();save();alSchedule(true);render(true);return}if(e.dataset&&e.dataset.stbike){stv().bikeId=isNaN(+e.value)?e.value:+e.value;save();stravaSync(true);return}
   if(e.id==='lt'&&window.__est){const x=window.__est[+e.value];if(x){$('#la').placeholder='target '+x.tgt+', blank if no air added'}}
   if(e.id==='files'&&e.files.length){msg.imp='Reading…';render();importFiles(Array.from(e.files));}
@@ -1713,6 +1717,83 @@ async function autoLocate(force){
   locBusy=false;render(true);
 }
 load();render();
+/* ---------- type-ahead suggestions (own dropdown) and shared-list submissions ---------- */
+function sgPool(kind,input,shared){   // shared=true: only the built-in and repository lists, not the rider's own additions
+  if(kind==='sealant')return shared?TG.BRANDS.filter(x=>x!=='Other'):sealantNames();
+  if(kind==='brand')return [...new Set(TIRE_DB.map(e=>cap(e.brand)).concat(shared?[]:cust().tires.map(e=>e.brand)))];
+  const bi=input.id==='c_m'?$('#c_b'):document.getElementById(input.id.replace(/m$/,'b')),b=(bi&&bi.value||'').trim().toLowerCase();
+  const src=TIRE_DB.map(e=>({b:e.brand,m:cap(e.model)})).concat(shared?[]:cust().tires.filter(e=>e.model).map(e=>({b:e.brand,m:e.model})));
+  return [...new Set(src.filter(x=>!b||x.b.toLowerCase()===b||x.b.toLowerCase().includes(b)).map(x=>x.m))]}
+function sgMatch(pool,q){q=q.trim().toLowerCase();const sc=x=>{const l=x.toLowerCase();if(!q)return 3;if(l.startsWith(q))return 0;if(l.split(/[^a-z0-9]+/).some(w=>w.startsWith(q)))return 1;return l.includes(q)?2:9};
+  return pool.map(x=>[sc(x),x]).filter(a=>a[0]<9).sort((a,b)=>a[0]-b[0]||a[1].localeCompare(b[1])).slice(0,8).map(a=>a[1])}
+let sgId=null,sgTimer=null;
+function sgHide(){const el=$('#sg');if(el)el.remove();sgId=null}
+function sgPlace(el,input){const r=input.getBoundingClientRect(),vv=window.visualViewport,vh=vv?vv.height:innerHeight,top0=vv?vv.offsetTop:0;
+  const below=top0+vh-r.bottom-8,above=r.top-top0-8,up=below<170&&above>below,room=Math.max(120,Math.min(up?above:below,300));
+  const w=Math.max(r.width,Math.min(280,innerWidth-16));el.style.left=Math.min(Math.max(8,r.left),innerWidth-8-w)+'px';el.style.width=w+'px';el.style.maxHeight=room+'px';
+  if(up){el.style.top='';el.style.bottom=(innerHeight-r.top+4)+'px'}else{el.style.bottom='';el.style.top=(r.bottom+4)+'px'}}
+function sgSent(kind,input,raw){const v=raw.trim().toLowerCase();if(kind==='sealant')return subQ().list.some(x=>x.item.kind==='sealant'&&x.item.name.toLowerCase()===v);
+  const f=input.dataset.f&&/^tires\.(\d+)\./.exec(input.dataset.f),t=f?S.tires[+f[1]]:null,b=(t?t.brand:($('#c_b')||{}).value||'').trim().toLowerCase(),m=(t?t.model:($('#c_m')||{}).value||'').trim().toLowerCase();
+  return subQ().list.some(x=>x.item.kind==='tire'&&x.item.brand.toLowerCase()===(kind==='brand'?v:b)&&(kind==='brand'||x.item.model.toLowerCase()===v))}
+function sgShow(input,fromFocus){
+  input=(input.id&&document.getElementById(input.id))||input;
+  const kind=input.dataset.sg;if(!kind)return;sgId=input.id;
+  const pool=sgPool(kind,input),raw=/^example/i.test(input.value.trim())?'':input.value,exact=pool.some(x=>x.toLowerCase()===raw.trim().toLowerCase()),listed=sgPool(kind,input,true).some(x=>x.toLowerCase()===raw.trim().toLowerCase());
+  const q=fromFocus&&exact?'':raw,list=sgMatch(pool,q);   // an example placeholder counts as empty; focusing a filled box lists everything so it can be changed
+  let el=$('#sg');if(!el){el=document.createElement('div');el.id='sg';el.className='sg';el.setAttribute('role','listbox');document.body.appendChild(el)}
+  const addable=raw.trim().length>=2&&!listed&&!sgSent(kind,input,raw);   // offered until it is on the shared list or has been sent
+  const what=kind==='sealant'?'sealant':'tire';
+  el.innerHTML=list.map(x=>`<div role="option" data-v="${esc(x)}">${esc(x)}</div>`).join('')+(addable?`<div role="option" class="add" data-add="${kind}">+ Not listed? Add “${esc(raw.trim())}” as a new ${what}</div>`:'');
+  if(!el.children.length){sgHide();return}
+  sgPlace(el,input)}
+function sgPick(input,v){input.value=v;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));sgHide()}
+function sgNote(input,text){let el=$('#sg');if(!el){el=document.createElement('div');el.id='sg';el.className='sg';document.body.appendChild(el)}el.innerHTML=`<div class="note" role="status">${esc(text)}</div>`;sgPlace(el,input);clearTimeout(sgTimer);sgTimer=setTimeout(sgHide,3500)}
+/* the rider's own additions, offered to the shared list (the service files them for review; see ai-proxy/README.md) */
+const subQ=()=>{S.subs=S.subs||{on:true,list:[]};if(!Array.isArray(S.subs.list))S.subs.list=[];return S.subs};
+let subBusy=false;
+function queueSubmit(it){const q=subQ();if(q.on===false)return 'off';const k=[it.kind,(it.brand||it.name||'').toLowerCase(),(it.model||'').toLowerCase(),it.nominalMm||0].join('|');
+  if(!q.list.some(x=>x.k===k))q.list.push({k,item:it,ms:Date.now(),sent:false,err:''});save();flushSubs();return aiUrl()?'sent':'queued'}
+async function flushSubs(){const q=subQ();if(!aiUrl()||subBusy||!q.list.some(x=>!x.sent))return;subBusy=true;
+  try{for(const e of q.list.filter(x=>!x.sent)){let r;try{r=await aiProxy('/submit',{method:'POST',body:JSON.stringify(e.item)})}catch(err){e.err='could not reach the service';break}
+      const j=r.j||{};if(r.status===200){e.sent=true;e.err=''}else if(j.error==='not_configured'){e.err='waiting for the service to be switched on';break}else{e.err=j.message||('error '+r.status);if(r.status===429||r.status>=500)break}}}
+  finally{q.list=q.list.filter(x=>!x.sent||Date.now()-x.ms<30*864e5);subBusy=false;save();if(!document.querySelector('input:focus'))render(true)}}
+function sgAdd(input){
+  const kind=input.dataset.sg;let it,label,done;
+  if(kind==='sealant'){const name=input.value.trim().replace(/\s+/g,' ');addCustomSealant(name);it={kind:'sealant',name};label=name}
+  else{
+    let brand,model,nom,type=null,psi=null;const f=input.dataset.f&&/^tires\.(\d+)\./.exec(input.dataset.f);
+    if(f){const t=S.tires[+f[1]];brand=(t.brand||'').trim();model=(t.model||'').trim();nom=+t.nominalMm||0;type=t.type;psi=t.maxManual&&t.maxPsi>0?t.maxPsi:null}
+    else{brand=($('#c_b')||{}).value||'';model=($('#c_m')||{}).value||'';nom=parseFloat(($('#c_n')||{}).value)||0;type=($('#c_y')||{}).value||null;brand=brand.trim();model=model.trim()}
+    if(!brand||!model){sgNote(input,'Type the brand and the model first.');return}
+    if(!(nom>=20&&nom<=90)){sgNote(input,'Enter the printed tire width in mm first, then tap Add.');return}
+    it={kind:'tire',brand,model,nominalMm:nom,maxPsi:psi,type:type||null};label=brand+' '+model;
+    if(f)addCustomTire(S.tires[+f[1]])}
+  const r=queueSubmit(it);save();
+  sgNote(input,`“${label}” is added to your list.`+(r==='sent'?' Sent for the shared list.':r==='queued'?' It will be sent for the shared list once an AI review and shared list service address is set (Data tab).':''));
+  input.dispatchEvent(new Event('change',{bubbles:true}))}
+document.addEventListener('focusin',ev=>{const e=ev.target;if(e&&e.dataset&&e.dataset.sg)sgShow(e,true)});
+document.addEventListener('input',ev=>{const e=ev.target;if(e&&e.dataset&&e.dataset.sg)sgShow(e)});
+document.addEventListener('focusout',ev=>{if(ev.target&&ev.target.dataset&&ev.target.dataset.sg)setTimeout(()=>{if(!(document.activeElement&&document.activeElement.dataset&&document.activeElement.dataset.sg)&&!$('#sg .note'))sgHide()},180)});
+document.addEventListener('pointerdown',ev=>{const o=ev.target.closest&&ev.target.closest('#sg');
+  if(!o){if(!(ev.target.dataset&&ev.target.dataset.sg))sgHide();return}
+  if(ev.pointerType==='mouse')ev.preventDefault()},true);   // a mouse press must not take focus from the box; touch scrolls the list, so choosing happens on click
+document.addEventListener('click',ev=>{const o=ev.target.closest&&ev.target.closest('#sg [role=option]');if(!o)return;
+  ev.preventDefault();const inp=document.getElementById(sgId);if(!inp)return;
+  if(o.dataset.add)sgAdd(inp);else sgPick(inp,o.dataset.v)},true);
+['scroll','resize'].forEach(n=>window.addEventListener(n,()=>{const el=$('#sg'),inp=sgId&&document.getElementById(sgId);if(el&&inp&&!el.querySelector('.note'))sgPlace(el,inp);else if(el&&!inp)sgHide()},true));
+if(window.visualViewport)window.visualViewport.addEventListener('resize',()=>{const el=$('#sg'),inp=sgId&&document.getElementById(sgId);if(el&&inp)sgPlace(el,inp)});
+/* tire list updates, same idea as the sealant list: tires.json in the repository, last good copy cached */
+const TIRES_URL='https://raw.githubusercontent.com/mpassman/TyreGuru/main/tires.json';
+const TIRE_BUILTIN=TIRE_DB.slice();
+function setTires(j){if(!j||!Array.isArray(j.tires))return false;
+  const ok=j.tires.filter(e=>e&&typeof e.brand==='string'&&typeof e.model==='string'&&e.nominal>=20&&e.nominal<=90&&e.psi>=15&&e.psi<=160).map(e=>{const o={brand:e.brand.toLowerCase(),model:e.model.toLowerCase(),nominal:+e.nominal,psi:+e.psi,src:e.src==='researched'?('found online, '+(e.srcUrl||'')):(e.src||'bicyclerollingresistance.com')};if(Array.isArray(e.not))o.not=e.not;if(e.tol)o.tol=+e.tol;return o});
+  if(!ok.length)return false;const keys=new Set(ok.map(e=>e.brand+'|'+e.model+'|'+e.nominal));
+  TIRE_DB.length=0;ok.forEach(e=>TIRE_DB.push(e));TIRE_BUILTIN.forEach(e=>{if(!keys.has(e.brand+'|'+e.model+'|'+e.nominal))TIRE_DB.push(e)});return true}
+(function(){try{const c=localStorage.getItem('tg_tires');if(c&&setTires(JSON.parse(c)))render()}catch(e){}
+  if(!TIRES_URL||typeof fetch!=='function')return;
+  fetch(TIRES_URL,{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&setTires(j)){try{localStorage.setItem('tg_tires',JSON.stringify(j))}catch(e){}render(true)}}).catch(()=>{})})();
+setTimeout(flushSubs,3000);
+
 /* Sealant list updates: set SEALANT_URL to the hosted sealants.json (https). The last good copy is cached and used offline. */
 const SEALANT_URL='https://raw.githubusercontent.com/mpassman/TyreGuru/main/sealants.json';
 (function(){try{const c=localStorage.getItem('tg_sealants');if(c&&TG.setSealants(JSON.parse(c)))render()}catch(e){}

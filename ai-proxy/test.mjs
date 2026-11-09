@@ -16,3 +16,15 @@ await show('2nd from same ip', await call(env, 'POST', '/review', { prompt: P },
 await show('3rd from same ip (limit 2)', await call(env, 'POST', '/review', { prompt: P }, { 'CF-Connecting-IP': '1.1.1.1' }));
 await show('wrong key upstream', await call({ ANTHROPIC_API_KEY: 'bad' }, 'POST', '/review', { prompt: P }, { 'CF-Connecting-IP': '9.9.9.9' }));
 const o = await call({}, 'OPTIONS', '/review'); console.log('preflight'.padEnd(34), o.status, o.headers.get('Access-Control-Allow-Headers'));
+
+// ---- submissions ----
+const gh = []; const realFetch = globalThis.fetch;
+globalThis.fetch = async (u, o) => { gh.push([u, o && o.method]); if (u.includes('/search/issues')) return new Response(JSON.stringify({ total_count: /Dup/.test(decodeURIComponent(u)) ? 1 : 0 })); return new Response('{}', { status: 201 }); };
+await show('submit, no github token', await call({}, 'POST', '/submit', { kind: 'sealant', name: 'Goo' }));
+const genv = { GITHUB_TOKEN: 't' };
+await show('submit sealant', await call(genv, 'POST', '/submit', { kind: 'sealant', name: 'Goo <b>Pro</b>`' }, { 'CF-Connecting-IP': '5.5.5.5' }));
+await show('submit tire', await call(genv, 'POST', '/submit', { kind: 'tire', brand: 'Acme', model: 'Fast', nominalMm: 32, maxPsi: 70, type: 'road' }, { 'CF-Connecting-IP': '5.5.5.5' }));
+await show('submit bad width', await call(genv, 'POST', '/submit', { kind: 'tire', brand: 'Acme', nominalMm: 5 }, { 'CF-Connecting-IP': '5.5.5.5' }));
+await show('submit duplicate', await call(genv, 'POST', '/submit', { kind: 'sealant', name: 'Dup Goo' }, { 'CF-Connecting-IP': '6.6.6.6' }));
+const posted = gh.filter((g) => g[1] === 'POST').length; console.log('issues created:', posted, '(expect 2)');
+await show('health shows submissions', await call(genv, 'GET', '/health'));

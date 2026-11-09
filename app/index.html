@@ -92,8 +92,8 @@ const TG = (() => {
   const SEALANT_DATA = {version:1, updated:"2026-11-08", generic:{road:[[28,50],[32,55],[40,60],[45,80],[50,95]],gravel:[[28,50],[32,55],[40,60],[45,80],[50,95]],mtb:[[51,95],[53,100],[56,100],[58,105],[61,110],[64,125],[71,130],[76,140]]},
    products:[
     {id:"stans-original",name:"Stan's Original / Race Day",family:"Stan's",formula:"Original and Race Day",aliases:["Stan's NoTubes","Stan's NoTubes Original"],
-     dose:{road:[[28,50],[32,55],[40,60],[45,80],[50,95]],gravel:[[28,50],[32,55],[40,60],[45,80],[50,95]],mtb:[[51,95],[53,100],[56,100],[58,105],[61,110],[64,125],[71,130],[76,140]]},
-     src:"maker",srcUrl:"https://stans.com/pages/how-much-sealant",note:"Stan's chart gives Original and Race Day the same amounts."},
+     dose:{road:[[28,50],[32,55],[40,60],[45,80],[50,95]],gravel:[[28,50],[32,55],[40,60],[45,80],[50,95]],mtb:[[51,95],[53,100],[56,100],[58,105],[61,110],[64,125],[71,130],[76,140],[102,175],[127,230]]},
+     src:"maker",srcUrl:"https://stans.com/pages/how-much-sealant",note:"Stan's chart gives Original and Race Day the same amounts, including fat bike (26 x 4 in 175 ml, 26 x 5 in 230 ml)."},
     {id:"stans-rolled-gold",name:"Stan's Rolled Gold",family:"Stan's",formula:"Rolled Gold",aliases:[],
      dose:{road:[[28,35],[32,40],[40,50],[45,60],[50,70]],gravel:[[28,35],[32,40],[40,50],[45,60],[50,70]],mtb:[[51,70],[53,75],[56,75],[58,80],[61,80],[64,85]]},
      src:"maker",srcUrl:"https://stans.com/pages/how-much-sealant",note:"Lower amounts than Original. Stan's lists no Rolled Gold amount for tires wider than 2.5 inch."},
@@ -110,7 +110,7 @@ const TG = (() => {
      dose:{road:[[28,50],[32,55],[40,60],[45,80],[50,95]],gravel:[[28,50],[32,55],[40,60],[45,80],[50,95]],mtb:[[51,88],[64,118]]},
      src:"secondary",srcUrl:"https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",note:"Same amounts as Regular. No separate Endurance figure found."},
     {id:"silca-ultimate-original",name:"Silca Ultimate Original",family:"Silca",formula:"Ultimate Original",aliases:["Silca","Silca Ultimate"],
-     dose:{road:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],gravel:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],mtb:[[51,100],[57,115],[61,125],[66,135]]},rep:{road:[[30,[30,44,59]],[45,[44,59,89]],[60,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]],gravel:[[30,[30,44,59]],[45,[44,59,89]],[60,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]],mtb:[[30,[30,44,59]],[45,[44,59,89]],[56,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]]},
+     dose:{road:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],gravel:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],mtb:[[51,100],[57,115],[61,125],[66,135]]},init:{road:[[30,59],[45,89],[60,118],[76,148],[999,177]],gravel:[[30,59],[45,89],[60,118],[76,148],[999,177]],mtb:[[30,59],[45,89],[56,118],[76,148],[999,177]]},rep:{road:[[30,[30,44,59]],[45,[44,59,89]],[60,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]],gravel:[[30,[30,44,59]],[45,[44,59,89]],[60,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]],mtb:[[30,[30,44,59]],[45,[44,59,89]],[56,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]]},
      src:"maker",srcUrl:"https://silca.gorgias.help/en-US/how-much-sealant-do-i-use-in-my-tire-1265414",note:"Silca Ultimate Sealant Fill Guide, by tire size (700c 28 mm 55 ml up to 50 mm 100 ml; 29 in 2.0 to 2.6 100 to 135 ml). Silca Replenisher is used with the Original: amounts come from Silca's Sealant + Replenisher chart. Pour sealant into the tire."},
     {id:"silca-ultimate-2",name:"Silca Ultimate 2.0",family:"Silca",formula:"Ultimate 2.0",aliases:[],
      dose:{road:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],gravel:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],mtb:[[51,100],[57,115],[61,125],[66,135]]},lifeMaxDays:180,
@@ -130,11 +130,12 @@ const TG = (() => {
   function doseInfo(widthMm, sealantName, type) {
     const p = sealantOf(sealantName), t = type === 'mtb' ? 'mtb' : (type === 'road' ? 'road' : 'gravel');
     const tbl = p && p.dose ? (p.dose[t] || p.dose.gravel) : null;
-    let ml, rep = null;
+    let ml, rep = null, init = null;
+    if (p && p.init) { const ib = p.init[t] || p.init.gravel, b = ib.find(x => widthMm <= x[0]) || ib[ib.length - 1]; init = b[1]; }
     if (p && p.rep) { const rb = p.rep[t] || p.rep.gravel, b = rb.find(x => widthMm <= x[0]) || rb[rb.length - 1]; rep = b[1]; }
     if (tbl && tbl.step) { const b = tbl.step.find(x => widthMm <= x[0]) || tbl.step[tbl.step.length - 1]; ml = b[1]; }
-    else ml = clamp(round(interp(tbl || SEALANT_DATA.generic[t], widthMm), 0), 30, 160);
-    return { rep, ml, src: tbl ? p.src : null, url: tbl ? p.srcUrl : null, note: p ? p.note : 'Generic dose. Follow the label.', product: p ? p.name : null };
+    else ml = clamp(round(interp(tbl || SEALANT_DATA.generic[t], widthMm), 0), 30, 250);
+    return { rep, init, ml, src: tbl ? p.src : null, url: tbl ? p.srcUrl : null, note: p ? p.note : 'Generic dose. Follow the label.', product: p ? p.name : null };
   }
   const DOSE_LEVELS = { standard: { f: 1, label: 'Standard' }, light: { f: 0.83, label: 'Light Race (about 1.7 oz for a 40 mm tire)' } };
   function fullDoseMl(widthMm, sealantName, type, level) { const ml = doseInfo(widthMm, sealantName, type).ml, f = (DOSE_LEVELS[level] || DOSE_LEVELS.standard).f; return f === 1 ? ml : round(ml * f, 0); }
@@ -785,7 +786,7 @@ function tireForm(t){
   <div><label for="${n}sd">Date last applied</label><input id="${n}sd" type="date" data-d="tires.${i}.sealant.dateMs" value="${fmtD(t.sealant.dateMs)}"></div>
   <div><label for="${n}sm">Amount put in, ${vU()}</label><input id="${n}sm" type="number" step="${US()?0.1:1}" data-sv="tires.${i}.sealant.ml" value="${vR(t.sealant.ml)}"></div></div>`}
   <div class="row"><div><label for="dl${i}">Sealant level</label><select id="dl${i}" data-f="tires.${i}.doseLevel">${Object.entries(TG.DOSE_LEVELS).map(([k,v])=>`<option value="${k}" ${(t.doseLevel||'standard')===k?'selected':''}>${esc(v.label)}</option>`).join('')}</select></div></div>
-  ${(()=>{const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type);const how=d.src==='maker'?'from the maker\'s chart':(d.src==='secondary'?'from a second-hand report of the maker\'s advice, not verified':'a generic estimate, no maker amount found');return `<p class="mute">Full dose for ${t.widthMm} mm${d.product?' with '+esc(d.product):''}: ${vfmt(TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel))}${t.doseLevel==='light'?' (Light Race)':''}, ${how}. ${esc(d.note)} Tire casings vary, so follow your sealant label.${d.rep?` Silca Replenisher for this width: 1st top-up ${vfmt(d.rep[0])}, 2nd ${vfmt(d.rep[1])}, 3rd ${vfmt(d.rep[2])}.`:''}${d.url?` <a href="${d.url}" target="_blank" rel="noopener">Source</a>`:''}</p>`})()}</div>`;
+  ${(()=>{const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type);const how=d.src==='maker'?'from the maker\'s chart':(d.src==='secondary'?'from a second-hand report of the maker\'s advice, not verified':'a generic estimate, no maker amount found');return `<p class="mute">Full dose for ${t.widthMm} mm${d.product?' with '+esc(d.product):''}: ${vfmt(TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel))}${t.doseLevel==='light'?' (Light Race)':''}, ${how}. ${esc(d.note)} Tire casings vary, so follow your sealant label.${d.init?` For a NEW tire, Silca's initial fill is ${vfmt(d.init)} (new tires soak up sealant); after that the full dose above applies.`:''}${d.rep?` Silca Replenisher for this width: 1st top-up ${vfmt(d.rep[0])}, 2nd ${vfmt(d.rep[1])}, 3rd ${vfmt(d.rep[2])}.`:''}${d.url?` <a href="${d.url}" target="_blank" rel="noopener">Source</a>`:''}</p>`})()}</div>`;
 }
 const cap=x=>x.replace(/\b\w/g,c=>c.toUpperCase());
 function datalists(){const b=[...new Set(TIRE_DB.map(e=>cap(e.brand)))],m=[...new Set(TIRE_DB.map(e=>cap(e.model)))];return `<datalist id="dl-brand">${b.map(x=>`<option value="${esc(x)}">`).join('')}</datalist><datalist id="dl-model">${m.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`}
@@ -1147,7 +1148,7 @@ document.addEventListener('click',async ev=>{
     const dt=v('c_d')?toMs(v('c_d')):Date.now();
     S.tireHistory=(S.tireHistory||[]).concat([{wheel:t.wheel,brand:t.brand,model:t.model,widthMm:t.widthMm,installMs:t.installMs,removedMs:dt,km:wear(t).km}]);
     Object.assign(t,{brand,model,type:v('c_y')||typeGuess({brand,model,nominalMm:nom})||(nom<=32?'road':nom>=45?'mtb':'gravel'),typeManual:!!v('c_y'),measManual:false,nominalMm:nom,widthMm:meas,installMs:dt,condition:'auto',fills:[],checks:[],cal:null,maxPsi:0,maxAuto:null,maxManual:false,
-      sealant:{brand:v('c_sb'),ml:ml>0?ml:TG.fullDoseMl(meas,v('c_sb'),S.tires&&S.tires[0]?S.tires[0].type:'gravel',S.tires&&S.tires[0]?S.tires[0].doseLevel:'standard'),dateMs:dt,events:[]}});
+      sealant:{brand:v('c_sb'),ml:ml>0?ml:(TG.doseInfo(meas,v('c_sb'),S.tires&&S.tires[0]?S.tires[0].type:'gravel').init||TG.fullDoseMl(meas,v('c_sb'),S.tires&&S.tires[0]?S.tires[0].type:'gravel',S.tires&&S.tires[0]?S.tires[0].doseLevel:'standard')),dateMs:dt,events:[]}});
     autoMax(t);S.rearSame=sameTires();S.sealSame=false;syncRear();if(+i===0)autoTerrain();S.example=false;changing=null;save();render();window.scrollTo(0,0)}
   else if(act==='pirelli'){S.tires.forEach(t=>{t.brand='Pirelli';t.model='P Zero Race TLR 4S';t.type='road';t.widthMm=32;t.nominalMm=32;t.maxPsi=80;t.maxAuto='bicyclerollingresistance.com';t.maxManual=false;t.cal={psi:t.wheel==='rear'?60.5:59,kg:135/2.20462,widthMm:32,terrain:'worn'}});S.rider.terrain='worn';S.rearSame=true;S.example=false;save();render()}
   else if(act==='clearex'){S=Object.assign(example(),{example:false,rides:[],tires:example().tires.map(t=>Object.assign(t,{fills:[],sealant:Object.assign(t.sealant,{events:[]})}))});save();render()}

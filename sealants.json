@@ -168,12 +168,20 @@
      [
       76,
       140
+     ],
+     [
+      102,
+      175
+     ],
+     [
+      127,
+      230
      ]
     ]
    },
    "src": "maker",
    "srcUrl": "https://stans.com/pages/how-much-sealant",
-   "note": "Stan's chart gives Original and Race Day the same amounts."
+   "note": "Stan's chart gives Original and Race Day the same amounts, including fat bike (26 x 4 in 175 ml, 26 x 5 in 230 ml)."
   },
   {
    "id": "stans-rolled-gold",
@@ -565,6 +573,74 @@
      [
       66,
       135
+     ]
+    ]
+   },
+   "init": {
+    "road": [
+     [
+      30,
+      59
+     ],
+     [
+      45,
+      89
+     ],
+     [
+      60,
+      118
+     ],
+     [
+      76,
+      148
+     ],
+     [
+      999,
+      177
+     ]
+    ],
+    "gravel": [
+     [
+      30,
+      59
+     ],
+     [
+      45,
+      89
+     ],
+     [
+      60,
+      118
+     ],
+     [
+      76,
+      148
+     ],
+     [
+      999,
+      177
+     ]
+    ],
+    "mtb": [
+     [
+      30,
+      59
+     ],
+     [
+      45,
+      89
+     ],
+     [
+      56,
+      118
+     ],
+     [
+      76,
+      148
+     ],
+     [
+      999,
+      177
      ]
     ]
    },

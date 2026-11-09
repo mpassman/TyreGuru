@@ -177,6 +177,7 @@ class TireGuruField extends WatchUi.DataField {
         var cx = x0 + cw / 2;
         var rad = dialRadius(cw, ch);
         var cy = y0 + 4 + rad;
+        bezel(dc, cx, cy, rad);
         if (zones != null) {
             band(dc, cx, cy, rad, 0.0, zones[0], dmax, zoneColor(0));
             band(dc, cx, cy, rad, zones[0], zones[1], dmax, zoneColor(1));
@@ -203,6 +204,7 @@ class TireGuruField extends WatchUi.DataField {
         var cx = x0 + cw / 2;
         var rad = dialRadius(cw, ch);
         var cy = y0 + 4 + rad;
+        bezel(dc, cx, cy, rad);
         band(dc, cx, cy, rad, 0.0, SEAL_LOW, 100.0, zoneColor(0));
         band(dc, cx, cy, rad, SEAL_LOW, SEAL_OK, 100.0, zoneColor(1));
         band(dc, cx, cy, rad, SEAL_OK, 100.0, 100.0, zoneColor(2));
@@ -213,8 +215,8 @@ class TireGuruField extends WatchUi.DataField {
     }
 
     function dialRadius(cw, ch) {
-        var r = cw / 2 - 3;
-        var byH = (ch - 4 - 2 * Graphics.getFontHeight(Graphics.FONT_XTINY) - 8) / 2;
+        var r = cw / 2 - 9;
+        var byH = (ch - 4 - 2 * Graphics.getFontHeight(Graphics.FONT_XTINY) - 14) / 2;
         if (byH < r) { r = byH; }
         if (r < 14) { r = 14; }
         return r;
@@ -236,6 +238,14 @@ class TireGuruField extends WatchUi.DataField {
         dc.setColor(color, Graphics.COLOR_BLACK);
         dc.setPenWidth(pen.toNumber());
         dc.drawArc(cx, cy, (rad - pen / 2).toNumber(), Graphics.ARC_CLOCKWISE, norm(90.0 - d0), norm(90.0 - d1));
+        dc.setPenWidth(1);
+    }
+
+    // thin light ring around the dial, like the bezel in the phone app
+    function bezel(dc, cx, cy, rad) {
+        dc.setColor(0xC4C8CC, Graphics.COLOR_BLACK);
+        dc.setPenWidth(2);
+        dc.drawCircle(cx, cy, rad + 7);
         dc.setPenWidth(1);
     }
 

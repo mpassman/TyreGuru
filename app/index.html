@@ -616,7 +616,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-09 j';
+const BUILD='2026-11-09 k';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -1234,12 +1234,13 @@ function airTrendCard(t){
 }
 function sealTrendCard(t){
   const nowMs=Date.now(),cur=Object.assign({},t.sealant,{endMs:null}),segs=(t.sealHist||[]).concat([cur]).filter(x=>x&&x.dateMs).sort((a,b)=>a.dateMs-b.dateMs);
-  const t0=Math.max(segs[0].dateMs,nowMs-180*DAY),span=Math.max(DAY,nowMs-t0),N=90,pts=[];
+  const t0=Math.max(segs[0].dateMs,nowMs-180*DAY),span=Math.max(DAY,nowMs-t0),N=90,pts=[],f=US()?1/29.5735:1;let doseNow=0;
   const levelAt=ms=>{let sg=null;for(const x of segs)if(x.dateMs<=ms)sg=x;if(!sg)return null;
     const t2=Object.assign({},t,{sealant:Object.assign({},sg,{events:(sg.events||[]).filter(e=>e.dateMs<=ms)}),checks:(t.checks||[]).filter(c=>c.dateMs<=ms&&c.dateMs>=sg.dateMs)});
-    const st=sealantStateFor(t2,S.rides,ms);return Math.max(0,Math.min(1,st.leftMl/(st.doseMl||1)))};
+    const st=sealantStateFor(t2,S.rides,ms);doseNow=st.doseMl||doseNow;return Math.max(0,st.leftMl)*f};   // amount left, in the rider's unit (fl oz or ml)
   for(let k=0;k<=N;k++){const ms=t0+span*k/N;pts.push([ms,levelAt(ms)])}
-  const W=320,H=190,L=34,R=8,T=12,B=40,X=ms=>L+(W-L-R)*(ms-t0)/span,Y=v=>T+(H-T-B)*(1-v);
+  const dose=doseNow*f,M=Math.max(dose,...pts.map(q=>q[1]||0),US()?0.5:10),raw=M/4,mag=Math.pow(10,Math.floor(Math.log10(raw))),step=[1,2,2.5,5,10].map(m=>m*mag).find(x=>x>=raw)||raw,top=Math.ceil(M/step-1e-9)*step,ticks=[];for(let v=0;v<=top+1e-9;v+=step)ticks.push(+v.toFixed(3));
+  const W=320,H=190,L=38,R=8,T=14,B=40,X=ms=>L+(W-L-R)*(ms-t0)/span,Y=v=>T+(H-T-B)*(1-v/top);
   let path='',pen=false;pts.forEach(q=>{if(q[1]==null){pen=false;return}path+=`${pen?'L':'M'}${X(q[0]).toFixed(1)},${Y(q[1]).toFixed(1)} `;pen=true});
   const lvl=ms=>{const v=levelAt(ms);return v==null?0:v};
   // everything that changed the sealant, newest first, for the list and the chart markers
@@ -1251,13 +1252,14 @@ function sealTrendCard(t){
     if(c.k==='puncture')return `<circle cx="${x}" cy="${y}" r="4.5" fill="var(--red)"/>`;
     if(c.k==='removed')return `<circle cx="${x}" cy="${y}" r="4.5" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>`;
     return `<path d="M${x},${(+y-5).toFixed(1)} l4,5 l-4,5 l-4,-5 z" fill="var(--mute)"/>`}).join('');
-  const grid=[0,.5,1].map(v=>`<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W-R}" y2="${Y(v).toFixed(1)}" stroke="var(--line)"/><text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">${v===1?'full':v===0?'0':'½'}</text>`).join('');
-  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Sealant left over time, with refills, punctures and removals marked" style="display:block">${grid}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><path d="${path}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${mk}<text x="${L}" y="${H-6}" font-size="11" fill="var(--mute)">${fmtD(t0)}</text><text x="${W-R}" y="${H-6}" text-anchor="end" font-size="11" fill="var(--ink)">now</text></svg>`;
+  const tl=v=>US()?(Math.abs(v-Math.round(v))<1e-6?String(Math.round(v)):v.toFixed(1)):String(Math.round(v));
+  const grid=ticks.map(v=>`<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W-R}" y2="${Y(v).toFixed(1)}" stroke="var(--line)"/><text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">${tl(v)}</text>`).join('')+`<line x1="${L}" y1="${Y(dose).toFixed(1)}" x2="${W-R}" y2="${Y(dose).toFixed(1)}" stroke="var(--ink)" stroke-dasharray="4 3" stroke-opacity=".6"/><text x="${W-R}" y="${(Y(dose)-3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">full dose ${tl(dose)}</text><text x="${L-4}" y="9" text-anchor="end" font-size="10" fill="var(--mute)">${vU()}</text>`;
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Sealant left, in ${vU()}, over time, with refills, punctures and removals marked" style="display:block">${grid}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><path d="${path}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${mk}<text x="${L}" y="${H-6}" font-size="11" fill="var(--mute)">${fmtD(t0)}</text><text x="${W-R}" y="${H-6}" text-anchor="end" font-size="11" fill="var(--ink)">now</text></svg>`;
   const has=k=>ch.some(c=>c.k===k&&c.ms>=t0);
   const legend=['<span>▲ refill</span>',has('puncture')?'<span style="color:var(--red)">●</span> puncture sealed or plugged':'',has('removed')?'<span>○</span> sealant removed':'',has('check')?'<span>◆</span> sealant check':''].filter(Boolean).join(' · ');
   const lab={start:'Sealant put in',refill:'Sealant added',puncture:'Puncture',removed:'Sealant removed',check:'Sealant checked'};
   const rows=ch.slice(0,12).map(c=>`<tr><td>${fmtD(c.ms)}</td><td>${lab[c.k]}${c.sub&&c.sub!=='sealed'&&c.sub!=='removed'?' ('+esc(c.sub)+')':''}${c.brand?' · '+esc(c.brand):''}</td><td>${c.k==='check'?esc(c.lv||''):(c.ml!=null?(c.k==='puncture'||c.k==='removed'?'−':'+')+vR(c.ml)+' '+vU():'')}</td></tr>`).join('');
-  return `<div class="card"><h3 style="margin-top:0">Sealant left</h3>${svg}<p class="mute" style="margin:4px 0 0">Share of a full dose left, over time. ${legend}</p></div>
+  return `<div class="card"><h3 style="margin-top:0">Sealant left</h3>${svg}<p class="mute" style="margin:4px 0 0">Estimated sealant left (${vU()}) over time. ${legend}</p></div>
   <div class="card"><h3 style="margin-top:0">Sealant changes</h3><div class="scroll"><table><thead><tr><th>Date</th><th>What</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table></div>${(t.sealHist||[]).length?'':'<p class="mute" style="margin:6px 0 0">Earlier refills from before this update were not kept. From now on every refill stays on the chart.</p>'}</div>`}
 function viewTrends(){
   const t=S.tires[trI]||S.tires[0],nowMs=Date.now();

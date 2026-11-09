@@ -6,7 +6,14 @@ name: Research new products
 on:
   issues:
     types: [opened, labeled]
+  schedule:
+    - cron: '23 14 * * 1'     # every Monday: look for newly released tires and sealants
   workflow_dispatch:
+    inputs:
+      discover:
+        description: 'Also search for newly released products'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -19,11 +26,12 @@ concurrency:
 
 jobs:
   research:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.issue.labels.*.name, 'new-product')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.issue.labels.*.name, 'new-product')
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DISCOVER: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.discover)) && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - name: Stop quietly if no key has been added yet

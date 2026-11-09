@@ -18,4 +18,6 @@ Doses are starting points from maker charts. Follow your sealant label.
 3. The research job (GitHub Action) reads those issues, asks Claude with web search for the maker's maximum and recommended pressure (tires) or recommended sealant amounts by width (sealants), checks the answer strictly (ranges, https source link), and opens a **pull request** listing each source. Nothing is merged automatically.
 4. You check the sources and merge. The app picks up the new lists the next time it opens. Products it could not find reliable figures for get the `research-failed` label and a comment, and are not added.
 
+Every Monday the job also searches for tires and sealants released in the last few months that nobody has submitted, researches them the same way, and includes them in the pull request (at most 8 products a week). It can be run any time from the Actions tab with the discovery box ticked.
+
 The job also runs by hand from the Actions tab (Run workflow). It is switched off until you add the repository secret `ANTHROPIC_API_KEY` (Settings, Secrets and variables, Actions) and tick "Allow GitHub Actions to create and approve pull requests" (Settings, Actions, General). Test it offline with `node scripts/research.test.mjs`.

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parseSubmission, validateTire, validateSealant, applyTire, applySealant, extractJson, run } from './research.mjs';
+import { parseSubmission, validateTire, validateSealant, applyTire, applySealant, extractJson, run, discoveredSubs } from './research.mjs';
 const body = (o) => ({ number: 7, body: 'x\n```json\n' + JSON.stringify(o) + '\n```' });
 const t = parseSubmission(body({ kind: 'tire', brand: 'Acme', model: 'Fast 5 TLR', nominalMm: 32, maxPsi: 70, type: 'road' }));
 assert.equal(t.nominal, 32); assert.equal(parseSubmission({ number: 1, body: 'no json' }), null);
@@ -32,3 +32,12 @@ const r = await run({ issues, tires, sealants: seal, key: 'k', fetchFn: fakeFetc
 assert.equal(calls.length, 2, 'duplicate request not researched twice');
 assert.ok(r.touched.tires && r.touched.sealants && tires.tires[0].psi === 72 && /rider entered 60/.test(r.report[0]));
 console.log('all research tests passed'); console.log(r.report.join('\n'));
+
+// ---- discovery ----
+const have = { tires: [{ brand: 'acme', model: 'fast 5 tlr', nominal: 32, psi: 80 }] }, hs = { products: [{ id: 'g', name: 'Goo Pro', aliases: [] }] };
+const found = discoveredSubs({ tires: [{ brand: 'Acme', model: 'Fast 5 TLR', widthsMm: [32, 35], sourceUrl: 'https://acme.com' }, { brand: 'Newco', model: 'Z', widthsMm: [700, 40], sourceUrl: 'https://n.com' }, { brand: 'NoSource', model: 'Q', widthsMm: [30] }], sealants: [{ name: 'Goo Pro', sourceUrl: 'https://g.com' }, { name: 'Fresh Seal', sourceUrl: 'https://f.com' }, { name: 'x`<b>', sourceUrl: 'http://bad.com' }] }, have, hs);
+assert.deepEqual(found.map((f) => f.kind + ':' + (f.name || f.brand + ' ' + f.model + ' ' + f.nominal)), ['tire:Acme Fast 5 TLR 35', 'tire:Newco Z 40', 'sealant:Fresh Seal'], 'known, unsourced, absurd and non-https entries dropped');
+assert.equal(discoveredSubs('junk', have, hs).length, 0);
+const r2 = await run({ issues: [], extra: found, tires: { tires: [] }, sealants: { products: [{ id: 'other', name: 'Other' }] }, key: 'k', fetchFn: fakeFetch, log() {} });
+assert.ok(/weekly search/.test(r2.report[0]) && r2.closes.length === 0, 'discovered items have no issue to close');
+console.log('discovery tests passed');

@@ -616,7 +616,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-09 n';
+const BUILD='2026-11-09 o';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -1170,7 +1170,7 @@ function airZoneLine(x){const Z=x.Z,r=v=>String(Math.round(v*10)/10);
 function sumCard(t){
   const i=S.tires.indexOf(t),x=tireStatus(t),L=levelWord(x),nm=t.wheel==='front'?'Front':'Rear';
   return `<div class="card big ${x.red?'red':'green'}"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${nm} tire</h2><span class="tag ${x.red?'red':'green'}">${x.red?'✕ RED':'✓ GREEN'}</span></div>
-  ${gaugeRow(t,x,L,{air:`<div class="gin"><label for="ha${i}">Air measured, PSI</label><input id="ha${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" value="" placeholder="e.g. 42.6"></div>`,seal:`<div class="gin"><label for="hs${i}">Sealant checked</label><select id="hs${i}"><option value="">Not checked</option><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div>`})}${patternsOn()?'<p class="mute" style="margin:0;font-size:11px;text-align:center">Stripes = low · dots = OK · solid = good · grid = too high · cross-hatch red = overfilled</p>':''}
+  ${gaugeRow(t,x,L,{air:`<div class="gin"><label for="ha${i}">Air measured, PSI</label><input id="ha${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" value="" placeholder="e.g. 42.6"></div>`,seal:`<div class="gin"><label for="hs${i}">Sealant checked</label><select id="hs${i}"><option value="">Not checked</option><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div>`})}<div style="margin:6px 0"><label for="hd${i}">Muc-Off dipstick, notches wet (optional)</label><input id="hd${i}" type="number" inputmode="numeric" step="1" min="0" max="99" autocomplete="off" placeholder="${dipBase(t)?'e.g. '+Math.max(0,dipBase(t).baseNotch-2):'set the baseline in Details first'}"></div>${patternsOn()?'<p class="mute" style="margin:0;font-size:11px;text-align:center">Stripes = low · dots = OK · solid = good · grid = too high · cross-hatch red = overfilled</p>':''}
   <p class="fix" style="${(x.ar.known&&!x.ar.needAir&&x.airRed)?'color:var(--red)':''}">${x.red?x.fix:(x.ar.known?'Good':'Log an air fill to start')}</p>
   ${airZoneLine(x)}
   ${newTireNote(t)}
@@ -1191,6 +1191,25 @@ function accuracyCard(t){
   const l=errs[errs.length-1],mae=errs.reduce((q,e)=>q+Math.abs(e.pred-e.meas),0)/errs.length,r1=v=>(Math.round(v*10)/10);
   return `<div class="card"><h3 style="margin-top:0">Estimate accuracy</h3><p style="margin:0 0 4px">Last reading: estimated <b>${r1(l.pred)}</b>, measured <b>${r1(l.meas)}</b> PSI (${l.pred>=l.meas?'estimate ':'estimate '}${r1(Math.abs(l.pred-l.meas))} PSI ${l.pred>=l.meas?'high':'low'}).</p><p class="mute" style="margin:0">${errs.length} reading${errs.length>1?'s':''} used · average miss ${r1(mae)} PSI · learned leak ${lk.pct.toFixed(1)}% a day${lk.n<3?' (still blending with the default)':''}.</p></div>`
 }
+/* ---------- dipstick test: compare the app's sealant estimate with a Muc-Off dipstick. The dipstick counts notches (a step scale), so a baseline says how many notches are wet with the full starting amount; later readings become a percent of that. Readings are kept for testing and never adjust the estimate. ---------- */
+function dipBase(t){const d=t.dip;return d&&d.baseNotch>0&&d.sealMs===t.sealant.dateMs?d:null}
+function dipCompare(t,notch,ms){const d=dipBase(t);if(!d)return null;
+  const st=sealantStateFor(t,S.rides,ms),estMl=Math.max(0,st.leftMl),estPct=d.baseMl>0?estMl/d.baseMl:0,dipPct=notch/d.baseNotch;
+  return {ms,notch,baseNotch:d.baseNotch,baseMl:d.baseMl,sealMs:d.sealMs,brand:t.sealant.brand||'',estMl,estPct,dipPct,diffPts:(estPct-dipPct)*100,off:estPct*d.baseNotch-notch}}
+function dipStats(list){const n=list.length;if(!n)return null;return {n,abs:list.reduce((a,r)=>a+Math.abs(r.diffPts),0)/n,bias:list.reduce((a,r)=>a+r.diffPts,0)/n,w1:list.filter(r=>Math.abs(r.off)<=1).length}}
+function dipCard(i){const t=S.tires[i],d=dipBase(t),m=msg['dip'+i]||'',pc=v=>Math.round(v*100)+'%';
+  const rd=(t.dipReadings||[]).filter(r=>r.sealMs===t.sealant.dateMs).sort((a,b)=>a.ms-b.ms),st=dipStats(rd);
+  const head=`<h3 style="margin-top:0">Sealant dipstick test</h3><p class="mute" style="margin-top:0">Compare the app's sealant estimate with a Muc-Off dipstick. The dipstick counts notches, so it is a step scale. First record how many notches are wet when the tire holds its full starting amount. Later readings become a percent of that and are compared with the app's estimate. Readings are kept for testing and never change the estimate.</p>`;
+  let body;
+  if(!d){body=`<div><label for="db${i}">Notches wet with the full starting amount in the tire</label><input id="db${i}" type="number" inputmode="numeric" step="1" min="1" max="99" autocomplete="off" placeholder="e.g. 8"></div><button data-act="dipbase" data-i="${i}" style="width:100%;margin-top:6px">Save baseline</button><p class="mute">Take the baseline right after adding sealant, and hold the wheel the same way every time (valve at the bottom, for example) so readings can be compared.${t.dip?' The sealant was refilled since the last baseline, so a new one is needed.':''}</p>`}
+  else{
+    const rows=rd.slice(-8).reverse().map(r=>`<tr><td>${fmtD(r.ms)}</td><td>${r.notch} of ${r.baseNotch}</td><td>${pc(r.dipPct)}</td><td>${pc(r.estPct)}</td><td>${r.diffPts>0?'+':''}${Math.round(r.diffPts)}</td></tr>`).join('');
+    body=`<p style="margin:0 0 6px"><b>Baseline:</b> ${d.baseNotch} notches = full (${vR(d.baseMl)} ${vU()}, ${fmtD(d.baseMs)}). One notch is about ${Math.round(100/d.baseNotch)}% of the starting amount.</p>
+    <div><label for="dr${i}">Notches wet now</label><input id="dr${i}" type="number" inputmode="numeric" step="1" min="0" max="99" autocomplete="off" placeholder="e.g. ${Math.max(0,d.baseNotch-2)}"></div><button data-act="dipread" data-i="${i}" style="width:100%;margin-top:6px">Save dipstick reading</button>
+    ${rows?`<table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:10px"><thead><tr style="text-align:left"><th>Date</th><th>Dipstick</th><th>Dipstick %</th><th>App %</th><th>App minus dipstick, points</th></tr></thead><tbody>${rows}</tbody></table>`:''}
+    ${st?`<p style="margin:8px 0 0"><b>${st.n} reading${st.n>1?'s':''}:</b> average difference ${Math.round(st.abs)} points; the app reads ${Math.abs(st.bias)<0.5?'about the same as the dipstick':(st.bias>0?'higher':'lower')+' by '+Math.round(Math.abs(st.bias))+' points on average'}; ${st.w1} of ${st.n} within one notch.</p><p class="mute" style="margin:4px 0 0">${st.n<5?'A few more readings across the sealant\'s life are needed before this means much. ':''}This assumes each notch is an equal share of the sealant, which may not hold in a round tire; the pattern across readings will show it.</p>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${rd.length?`<button class="ghost" data-act="dipundo" data-i="${i}">Delete last reading</button>`:''}<button class="ghost" data-act="dipreset" data-i="${i}">Set a new baseline</button></div>`}
+  return `<div class="card">${head}${body}<p class="mute" id="dipm${i}" aria-live="polite" style="margin:6px 0 0">${esc(m)}</p></div>`}
 function viewDetail(i){
   const t=S.tires[i],x=tireStatus(t),A=x.A,ar=x.ar,sl=x.sl,nm=t.wheel==='front'?'Front':'Rear';
   const what=x.red?[x.airRed?'Air':'',x.sealRed?'Sealant':''].filter(Boolean).join(' and '):'All good';
@@ -1203,6 +1222,7 @@ function viewDetail(i){
   <div class="sboxes">${sbox('Now (estimate)',ar.known?(Math.round(ar.estPsi*10)/10)+' PSI':'unknown',x.airRed)}${sbox('Target',A.tgt+' PSI',false)}</div>
   <p class="mute">Why: ${why}</p>
   ${accuracyCard(t)}
+  ${dipCard(i)}
   <div class="card"><h3 style="margin-top:0">Enter measured pressure</h3><p class="mute" style="margin-top:0">Checked this tire with a gauge? Enter the reading and the estimate resets to it.</p><div class="row"><div><label for="gp">Gauge reading, PSI</label><input id="gp" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" value="" placeholder="Type your reading, e.g. 42.6"></div></div><button data-act="gauge" data-i="${i}" style="width:100%">Save reading</button><p class="mute" id="gpm" aria-live="polite">${esc(msg.gauge||'')}</p></div>
   ${adjustCard(i)}
   <p style="margin:8px 0;padding:6px 10px;border:2px solid var(--red);border-radius:6px;background:var(--card)"><b>Never inflate above ${maxTxt}.</b> Also check the maximum printed on your rim. Stop and let air out if the gauge goes over.</p>
@@ -1422,7 +1442,7 @@ document.addEventListener('click',async ev=>{
     if(!brand||!model||!(nom>0)){msg.chg='Enter the brand, model and printed width.';return render()}
     const dt=v('c_d')?toMs(v('c_d')):Date.now();
     S.tireHistory=(S.tireHistory||[]).concat([{wheel:t.wheel,brand:t.brand,model:t.model,widthMm:t.widthMm,installMs:t.installMs,removedMs:dt,km:wear(t).km}]);
-    Object.assign(t,{brand,model,type:v('c_y')||typeGuess({brand,model,nominalMm:nom})||(nom<=32?'road':nom>=45?'mtb':'gravel'),typeManual:!!v('c_y'),measManual:false,nominalMm:nom,widthMm:meas,installMs:dt,condition:'auto',fills:[],checks:[],cal:null,maxPsi:0,maxAuto:null,maxManual:false,
+    Object.assign(t,{brand,model,type:v('c_y')||typeGuess({brand,model,nominalMm:nom})||(nom<=32?'road':nom>=45?'mtb':'gravel'),typeManual:!!v('c_y'),measManual:false,nominalMm:nom,widthMm:meas,installMs:dt,condition:'auto',fills:[],checks:[],dip:null,dipReadings:[],cal:null,maxPsi:0,maxAuto:null,maxManual:false,
       sealant:{brand:v('c_sb'),ml:ml>0?ml:(TG.doseInfo(meas,v('c_sb'),S.tires&&S.tires[0]?S.tires[0].type:'gravel').init||TG.fullDoseMl(meas,v('c_sb'),S.tires&&S.tires[0]?S.tires[0].type:'gravel',S.tires&&S.tires[0]?S.tires[0].doseLevel:'standard')),dateMs:dt,events:[]}});
     autoMax(t);addCustomTire(t);addCustomSealant(t.sealant.brand);S.rearSame=sameTires();S.sealSame=false;syncRear();if(+i===0)autoTerrain();S.example=false;changing=null;save();render();window.scrollTo(0,0)}
   else if(act==='alack'){const a=AL();alDanger().forEach(q=>{a.ack[q.id]=true});alStop();save();render()}
@@ -1461,11 +1481,22 @@ document.addEventListener('click',async ev=>{
     save();render();
     if(tempC==null&&S.home){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});save();render(true)}catch(e){}}}
   else if(act==='homesave'){const k=+b.dataset.i,t=S.tires[k],pv=$('#ha'+k).value,v=Math.round(parseFloat(pv)*10)/10,lv=$('#hs'+k).value,done=[];
+    const dn=$('#hd'+k)?$('#hd'+k).value:'';let dc=null;
     if(pv!==''&&!(v>0&&v<200)){msg['h'+k]='Enter the pressure on your gauge, in PSI.';return render(true)}
-    if(pv===''&&!lv){msg['h'+k]='Enter a pressure, pick a sealant level, or both.';return render(true)}
+    if(pv===''&&!lv&&dn===''){msg['h'+k]='Enter a pressure, pick a sealant level, enter dipstick notches, or any of them.';return render(true)}
+    if(dn!==''){const nn=Math.round(+dn);if(!(nn>=0&&nn<=99)){msg['h'+k]='Enter the number of notches that are wet on the dipstick.';return render(true)}
+      dc=dipCompare(t,nn,Date.now());if(!dc){msg['h'+k]='Set the dipstick baseline in Details first.';return render(true)}}   // compared before any check below, so the estimate is the app's own
     if(pv!==''){t.fills.push({dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});done.push('air '+v+' PSI')}
+    if(dc){(t.dipReadings=t.dipReadings||[]).push(dc);done.push('dipstick '+dc.notch+' of '+dc.baseNotch+' (app '+Math.round(dc.estPct*100)+'% vs dipstick '+Math.round(dc.dipPct*100)+'%)')}
     if(lv){t.checks.push({dateMs:Date.now(),level:lv});done.push('sealant "'+lv+'"')}
     S.example=false;msg['h'+k]='Saved '+done.join(' and ')+'.';save();render(true)}
+  else if(act==='dipbase'){const i=+b.dataset.i,t=S.tires[i],n=Math.round(+$('#db'+i).value);if(!(n>=1&&n<=99)){msg['dip'+i]='Enter how many notches are wet with the full starting amount (1 or more).';return render(true)}
+    const ms=Date.now();t.dip={baseNotch:n,baseMl:Math.round(Math.max(0,sealantStateFor(t,S.rides,ms).leftMl)*10)/10,baseMs:ms,sealMs:t.sealant.dateMs};msg['dip'+i]='Baseline saved: '+n+' notches = full.';save();render(true)}
+  else if(act==='dipread'){const i=+b.dataset.i,t=S.tires[i],raw=$('#dr'+i).value,n=Math.round(+raw);if(raw===''||!(n>=0&&n<=99)){msg['dip'+i]='Enter the number of notches that are wet.';return render(true)}
+    const c=dipCompare(t,n,Date.now());if(!c){msg['dip'+i]='Set the baseline first.';return render(true)}
+    (t.dipReadings=t.dipReadings||[]).push(c);msg['dip'+i]='Saved. Dipstick '+Math.round(c.dipPct*100)+'%, app '+Math.round(c.estPct*100)+'%.';save();render(true)}
+  else if(act==='dipundo'){const i=+b.dataset.i,t=S.tires[i],L=(t.dipReadings||[]).filter(r=>r.sealMs===t.sealant.dateMs);if(L.length){const last=L.reduce((a,r)=>r.ms>a.ms?r:a);t.dipReadings=t.dipReadings.filter(r=>r!==last);msg['dip'+i]='Last reading deleted.';save()}render(true)}
+  else if(act==='dipreset'){const i=+b.dataset.i,t=S.tires[i];t.dip=null;msg['dip'+i]='Enter the notch count for the full starting amount.';save();render(true)}
   else if(act==='gauge'){const t=S.tires[+b.dataset.i],v=Math.round(parseFloat($('#gp').value)*10)/10;if(!(v>0&&v<200)){msg.gauge='Enter the pressure on your gauge, in PSI.';return render(true)}
     t.fills.push({dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.gauge='Saved. The estimate now starts from '+v+' PSI.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render(true)}
   else if(act==='logair'){const t=tire(),af=parseFloat($('#la').value),be=parseFloat($('#lb').value);if(isNaN(af)&&isNaN(be)){msg.log='Enter the reading or the pressure after filling.';return render()}
@@ -1576,7 +1607,7 @@ const isoD=ms=>ms?new Date(ms).toISOString().slice(0,10):'';
 const isoT=ms=>ms?new Date(ms).toISOString().slice(0,16)+'Z':'';
 const CSV_COLS=['record','date_time','wheel','tire','width_mm','nominal_width_mm','rim_width_mm','tire_type','max_psi','hookless','installed_date',
  'sealant_brand','sealant_dose_ml','sealant_applied_date','air_target_psi','air_low_line_psi','air_estimate_psi','leak_pct_per_day','sealant_estimate_ml','sealant_percent_of_full_dose',
- 'air_before_psi','air_after_psi','air_change_psi','fill_temp_c','altitude_m','sealant_check_level','puncture_hole_mm','puncture_kind','sealant_lost_ml','sealant_removed_ml',
+ 'air_before_psi','air_after_psi','air_change_psi','fill_temp_c','altitude_m','sealant_check_level','puncture_hole_mm','puncture_kind','sealant_lost_ml','sealant_removed_ml','air_app_estimate_psi','air_difference_psi','dipstick_notch','dipstick_base_notch','dipstick_percent','sealant_estimate_percent_of_base','difference_points','within_one_notch',
  'ride_hours','ride_km','ride_air_c','ride_road_c','body_weight_kg','rider_kg','bike_kg','terrain','surface','traffic_speed_kmh','traffic_free_flow_kmh','traffic_road_adjust_c','note'];
 function buildCsv(){
   const rows=[CSV_COLS],R=o=>rows.push(CSV_COLS.map(c=>o[c]==null?'':o[c])),r1=v=>v==null||isNaN(v)?'':Math.round(v*10)/10;
@@ -1587,9 +1618,13 @@ function buildCsv(){
       sealant_brand:t.sealant.brand,sealant_dose_ml:t.sealant.ml,sealant_applied_date:isoD(t.sealant.dateMs),
       air_target_psi:A?r1(A.tgt):'',air_low_line_psi:A?r1(A.tgt*0.8):'',air_estimate_psi:A&&A.air&&A.air.known?r1(A.air.estPsi):'',leak_pct_per_day:A&&A.air&&A.air.known?Math.round(A.air.leak.pct*100)/100:'',
       sealant_estimate_ml:A?Math.round(A.sealant.leftMl):'',sealant_percent_of_full_dose:A&&full?Math.round(100*A.sealant.leftMl/full):'',note:A?(A.sealant.needAdd?'sealant low: add '+A.sealant.addMl+' ml':'sealant ok'):''}));
-    (t.fills||[]).slice().sort((x,y)=>x.dateMs-y.dateMs).forEach(f=>{const d=f.beforePsi!=null?f.afterPsi-f.beforePsi:null;
-      R(Object.assign({},base,{record:'air',date_time:isoT(f.dateMs),air_before_psi:r1(f.beforePsi),air_after_psi:r1(f.afterPsi),air_change_psi:d==null?'':r1(d),fill_temp_c:r1(f.fillC),altitude_m:f.altM!=null?Math.round(f.altM):'',
+    const fsrt=(t.fills||[]).slice().sort((x,y)=>x.dateMs-y.dateMs);
+    fsrt.forEach((f,k)=>{const d=f.beforePsi!=null?f.afterPsi-f.beforePsi:null;let pe=null;   // what the app expected before this gauge reading, for comparing with the gauge
+      if(k>0&&f.beforePsi!=null){try{const st=TG.airState({lastFill:fsrt[k-1],fills:fsrt.slice(0,k),targetPsi:1,nowMs:f.dateMs,nowC:f.fillC!=null?f.fillC:null,nowAltM:f.altM!=null?f.altM:null,a:S.a});if(st.known&&(f.dateMs-fsrt[k-1].dateMs)/DAY>=0.5)pe=st.estPsi}catch(e){}}
+      R(Object.assign({},base,{record:'air',date_time:isoT(f.dateMs),air_before_psi:r1(f.beforePsi),air_after_psi:r1(f.afterPsi),air_change_psi:d==null?'':r1(d),air_app_estimate_psi:pe==null?'':r1(pe),air_difference_psi:pe==null?'':r1(pe-f.beforePsi),fill_temp_c:r1(f.fillC),altitude_m:f.altM!=null?Math.round(f.altM):'',
         note:d==null?'reading or fill':(Math.abs(d)<0.05?'gauge reading':(d<0?'air let out':'air added'))}))});
+    if(t.dip)R(Object.assign({},base,{record:'dipstick_baseline',date_time:isoT(t.dip.baseMs),sealant_brand:t.sealant.brand,sealant_applied_date:isoD(t.dip.sealMs),sealant_estimate_ml:Math.round(t.dip.baseMl),dipstick_base_notch:t.dip.baseNotch,note:'notches wet with the full starting amount'}));
+    (t.dipReadings||[]).forEach(r=>R(Object.assign({},base,{record:'dipstick',date_time:isoT(r.ms),sealant_brand:r.brand,sealant_applied_date:isoD(r.sealMs),sealant_estimate_ml:Math.round(r.estMl),dipstick_notch:r.notch,dipstick_base_notch:r.baseNotch,dipstick_percent:Math.round(r.dipPct*100),sealant_estimate_percent_of_base:Math.round(r.estPct*100),difference_points:r1(r.diffPts),within_one_notch:Math.abs(r.off)<=1?'yes':'no',note:'base amount '+Math.round(r.baseMl)+' ml; app minus dipstick'})));
     (t.checks||[]).forEach(c=>R(Object.assign({},base,{record:'sealant_check',date_time:isoT(c.dateMs),sealant_check_level:c.level})));
     (t.sealant.events||[]).forEach(e=>R(Object.assign({},base,e.kind==='removed'?{record:'sealant_removed',date_time:isoT(e.dateMs),sealant_removed_ml:r1(e.ml)}:{record:'puncture',date_time:isoT(e.dateMs),puncture_hole_mm:e.holeMm||'',puncture_kind:e.kind||'sealed',sealant_lost_ml:r1(e.ml||S.a.mlPerSealEvent)})));
     /* trend: estimated air and sealant day by day, from the first entry to today. Built only from rides you entered or loaded from files. */
@@ -1613,7 +1648,7 @@ function dataCard(){return `<div class="card"><h2>Your data and privacy</h2>
   <li><b>Weather and sealant list.</b> The app asks public services for the weather at your start place and for the sealant list. Nothing else leaves the phone unless you copy it yourself.</li>
   <li><b>Backup and export.</b> Both leave out sign-in keys and anything read from a connected service.</li></ul>
   <h3 style="margin:10px 0 4px">Export for a spreadsheet</h3>
-  <p class="mute" style="margin:0 0 6px">Makes a CSV file that opens in Excel or Google Sheets. It has your tires and settings, every air entry and gauge reading (including air let out), sealant checks, punctures with hole size and sealant lost, sealant removed, rides with temperatures, and day-by-day trend rows for air pressure and sealant. No names, no locations. Units are metric and PSI. To share test results, send the file yourself; the app never sends it for you.</p>
+  <p class="mute" style="margin:0 0 6px">Makes a CSV file that opens in Excel or Google Sheets. It has your tires and settings, every air entry and gauge reading (including air let out, with the app's own estimate beside each gauge reading), sealant checks, Muc-Off dipstick readings with the app's sealant estimate beside each, punctures with hole size and sealant lost, sealant removed, rides with temperatures, and day-by-day trend rows for air pressure and sealant. No names, no locations. Units are metric and PSI. To share test results, send the file yourself; the app never sends it for you.</p>
   <label style="display:block;margin:4px 0"><input type="checkbox" data-exp="rides" ${exp.rides?'checked':''}> Include rides from my own files</label>
   <label style="display:block;margin:4px 0"><input type="checkbox" data-exp="weight" ${exp.weight?'checked':''}> Include body weight I typed in</label>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button data-act="csvmake">Make CSV</button>${exp.csv?'<button class="ghost" data-act="csvcopy">Copy CSV</button><button class="ghost" data-act="csvdl">Download CSV</button>':''}</div>

@@ -91,31 +91,31 @@ const TG = (() => {
      This list can be replaced at launch by a hosted sealants.json (see loadRemoteSealants in the app). */
   const SEALANT_DATA = {version:1, updated:"2026-11-08", generic:{road:[[28,50],[32,55],[40,60],[45,80],[50,95]],gravel:[[28,50],[32,55],[40,60],[45,80],[50,95]],mtb:[[51,95],[53,100],[56,100],[58,105],[61,110],[64,125],[71,130],[76,140]]},
    products:[
-    {id:"stans-original",name:"Stan's Original / Race Day",family:"Stan's",formula:"Original and Race Day",aliases:["Stan's NoTubes","Stan's NoTubes Original"],
+    {id:"stans-original",checkMonths:"3",name:"Stan's Original / Race Day",family:"Stan's",formula:"Original and Race Day",aliases:["Stan's NoTubes","Stan's NoTubes Original"],
      dose:{road:[[28,50],[32,55],[40,60],[45,80],[50,95]],gravel:[[28,50],[32,55],[40,60],[45,80],[50,95]],mtb:[[51,95],[53,100],[56,100],[58,105],[61,110],[64,125],[71,130],[76,140],[102,175],[127,230]]},
      src:"maker",srcUrl:"https://stans.com/pages/how-much-sealant",note:"Stan's chart gives Original and Race Day the same amounts, including fat bike (26 x 4 in 175 ml, 26 x 5 in 230 ml)."},
-    {id:"stans-rolled-gold",name:"Stan's Rolled Gold",family:"Stan's",formula:"Rolled Gold",aliases:[],
+    {id:"stans-rolled-gold",checkMonths:"3",name:"Stan's Rolled Gold",family:"Stan's",formula:"Rolled Gold",aliases:[],
      dose:{road:[[28,35],[32,40],[40,50],[45,60],[50,70]],gravel:[[28,35],[32,40],[40,50],[45,60],[50,70]],mtb:[[51,70],[53,75],[56,75],[58,80],[61,80],[64,85]]},
      src:"maker",srcUrl:"https://stans.com/pages/how-much-sealant",note:"Lower amounts than Original. Stan's lists no Rolled Gold amount for tires wider than 2.5 inch."},
-    {id:"mucoff-road-gravel",name:"Muc-Off road and gravel",family:"Muc-Off",formula:"Road and Gravel",aliases:["Muc-Off No Puncture Hassle"],
+    {id:"mucoff-road-gravel",checkMonths:"3 to 6",name:"Muc-Off road and gravel",family:"Muc-Off",formula:"Road and Gravel",aliases:["Muc-Off No Puncture Hassle"],
      dose:{road:[[23,45],[28,45],[30,75],[45,75],[50,75]],gravel:[[23,45],[28,45],[30,75],[45,75],[50,75]],mtb:[[51,67],[64,122],[76,140]]},lifeMaxDays:180,
      src:"secondary",srcUrl:"https://muc-off.com/blogs/how-to-hub/how-to-use-muc-off-no-puncture-hassle-tubeless-sealant",note:"Road 23-28c 30-60 ml (45 used), gravel 30-45c 70-80 ml (75 used), as summarized from Muc-Off's guide. Muc-Off's own product page lists 60-75 ml for 700c cross tires. Lasts 6+ months; check every 750 miles."},
-    {id:"mucoff-mtb",name:"Muc-Off mountain bike",family:"Muc-Off",formula:"MTB",aliases:[],
+    {id:"mucoff-mtb",checkMonths:"6",name:"Muc-Off mountain bike",family:"Muc-Off",formula:"MTB",aliases:[],
      dose:{road:[[23,45],[28,45],[30,75],[45,75],[50,75]],gravel:[[23,45],[28,45],[30,75],[45,75],[50,75]],mtb:[[51,67],[64,122],[76,140]]},lifeMaxDays:180,
      src:"maker",srcUrl:"https://muc-off.com/blogs/how-to-hub/how-to-use-muc-off-no-puncture-hassle-tubeless-sealant",note:"60-75 ml for 26 and 27.5 inch, 105-140 ml for 29 inch, downhill 120-140 ml (midpoints used). Lasts 6+ months."},
-    {id:"orange-regular",name:"Orange Seal Regular",family:"Orange Seal",formula:"Regular",aliases:["Orange Seal"],
+    {id:"orange-regular",checkMonths:"3 to 6",name:"Orange Seal Regular",family:"Orange Seal",formula:"Regular",aliases:["Orange Seal"],
      dose:{road:[[28,45],[32,55],[40,60],[45,80],[50,95]],gravel:[[28,45],[32,55],[40,60],[45,80],[50,95]],mtb:[[51,88],[64,118]]},lifeMaxDays:180,
      src:"secondary",srcUrl:"https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",note:"From summaries of Orange Seal guidance: road 28 mm 30-59 ml (45 used), 27.5 in about 3 oz, 29 in about 4 oz. Other widths use the generic dose. Typically lasts 3 to 6 months; top up 1-2 oz when the slosh drops."},
-    {id:"orange-endurance",name:"Orange Seal Endurance",family:"Orange Seal",formula:"Endurance",aliases:[],
+    {id:"orange-endurance",checkMonths:"3 to 6",name:"Orange Seal Endurance",family:"Orange Seal",formula:"Endurance",aliases:[],
      dose:{road:[[28,45],[32,55],[40,60],[45,80],[50,95]],gravel:[[28,45],[32,55],[40,60],[45,80],[50,95]],mtb:[[51,88],[64,118]]},lifeMaxDays:180,
      src:"secondary",srcUrl:"https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",note:"Same amounts as Regular; no separate Endurance figures found. Typically lasts 3 to 6 months; top up 1-2 oz when the slosh drops."},
     {id:"silca-ultimate-original",name:"Silca Ultimate Original",family:"Silca",formula:"Ultimate Original",aliases:["Silca","Silca Ultimate"],
      dose:{road:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],gravel:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],mtb:[[51,100],[57,115],[61,125],[66,135]]},init:{road:[[30,59],[45,89],[60,118],[76,148],[999,177]],gravel:[[30,59],[45,89],[60,118],[76,148],[999,177]],mtb:[[30,59],[45,89],[56,118],[76,148],[999,177]]},rep:{road:[[30,[30,44,59]],[45,[44,59,89]],[60,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]],gravel:[[30,[30,44,59]],[45,[44,59,89]],[60,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]],mtb:[[30,[30,44,59]],[45,[44,59,89]],[56,[59,89,118]],[76,[74,103,148]],[999,[89,133,177]]]},
      src:"maker",srcUrl:"https://silca.gorgias.help/en-US/how-much-sealant-do-i-use-in-my-tire-1265414",note:"Silca Ultimate Sealant Fill Guide, by tire size (700c 28 mm 55 ml up to 50 mm 100 ml; 29 in 2.0 to 2.6 100 to 135 ml). Silca Replenisher is used with the Original: amounts come from Silca's Sealant + Replenisher chart. Pour sealant into the tire."},
-    {id:"silca-ultimate-2",name:"Silca Ultimate 2.0",family:"Silca",formula:"Ultimate 2.0",aliases:[],
+    {id:"silca-ultimate-2",checkMonths:"6",name:"Silca Ultimate 2.0",family:"Silca",formula:"Ultimate 2.0",aliases:[],
      dose:{road:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],gravel:[[28,55],[32,65],[40,80],[42,85],[45,90],[50,100]],mtb:[[51,100],[57,115],[61,125],[66,135]]},lifeMaxDays:180,
      src:"maker",srcUrl:"https://silca.gorgias.help/en-US/how-much-sealant-do-i-use-in-my-tire-1265414",note:"Silca Ultimate Sealant Fill Guide, by tire size. No Replenisher with the 2.0: refill with the original formula. Retention up to 6 months."},
-    {id:"schwalbe-doc-blue-pro",name:"Schwalbe Doc Blue Professional",family:"Schwalbe",formula:"Doc Blue Professional",aliases:["Schwalbe Doc Blue"],
+    {id:"schwalbe-doc-blue-pro",checkMonths:"2 to 7",name:"Schwalbe Doc Blue Professional",family:"Schwalbe",formula:"Doc Blue Professional",aliases:["Schwalbe Doc Blue"],
      dose:{road:[[23,75],[60,75],[62,105],[100,105]],gravel:[[23,75],[60,75],[62,105],[100,105]],mtb:[[23,75],[60,75],[62,105],[100,105]]},lifeMaxDays:210,
      src:"maker",srcUrl:"https://www.schwalbetires.com/tire-accessories/sealants-mounting-fluids/",note:"60 to 90 ml for 23 to 60 mm tires, 90 to 120 ml for 62 to 100 mm (midpoints used). Effective up to 7 months."},
     {id:"bontrager-tlr",name:"Bontrager TLR",family:"Bontrager",formula:"TLR",aliases:[],dose:null,src:null,note:"No maker amount found. Generic dose used."},
@@ -135,7 +135,8 @@ const TG = (() => {
     if (p && p.rep) { const rb = p.rep[t] || p.rep.gravel, b = rb.find(x => widthMm <= x[0]) || rb[rb.length - 1]; rep = b[1]; }
     if (tbl && tbl.step) { const b = tbl.step.find(x => widthMm <= x[0]) || tbl.step[tbl.step.length - 1]; ml = b[1]; }
     else ml = clamp(round(interp(tbl || SEALANT_DATA.generic[t], widthMm), 0), 30, 250);
-    return { rep, init, ml, src: tbl ? p.src : null, url: tbl ? p.srcUrl : null, note: p ? p.note : 'Generic dose. Follow the label.', product: p ? p.name : null };
+    const half = (p && p.dose && !p.rep) ? round(ml / 2, 0) : null;
+    return { half, chk: p && p.checkMonths ? p.checkMonths : null, rep, init, ml, src: tbl ? p.src : null, url: tbl ? p.srcUrl : null, note: p ? p.note : 'Generic dose. Follow the label.', product: p ? p.name : null };
   }
   const DOSE_LEVELS = { standard: { f: 1, label: 'Standard' }, light: { f: 0.83, label: 'Light Race (about 1.7 oz for a 40 mm tire)' } };
   function fullDoseMl(widthMm, sealantName, type, level) { const ml = doseInfo(widthMm, sealantName, type).ml, f = (DOSE_LEVELS[level] || DOSE_LEVELS.standard).f; return f === 1 ? ml : round(ml * f, 0); }
@@ -786,7 +787,7 @@ function tireForm(t){
   <div><label for="${n}sd">Date last applied</label><input id="${n}sd" type="date" data-d="tires.${i}.sealant.dateMs" value="${fmtD(t.sealant.dateMs)}"></div>
   <div><label for="${n}sm">Amount put in, ${vU()}</label><input id="${n}sm" type="number" step="${US()?0.1:1}" data-sv="tires.${i}.sealant.ml" value="${vR(t.sealant.ml)}"></div></div>`}
   <div class="row"><div><label for="dl${i}">Sealant level</label><select id="dl${i}" data-f="tires.${i}.doseLevel">${Object.entries(TG.DOSE_LEVELS).map(([k,v])=>`<option value="${k}" ${(t.doseLevel||'standard')===k?'selected':''}>${esc(v.label)}</option>`).join('')}</select></div></div>
-  ${(()=>{const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type);const how=d.src==='maker'?'from the maker\'s chart':(d.src==='secondary'?'from a second-hand report of the maker\'s advice, not verified':'a generic estimate, no maker amount found');return `<p class="mute">Full dose for ${t.widthMm} mm${d.product?' with '+esc(d.product):''}: ${vfmt(TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel))}${t.doseLevel==='light'?' (Light Race)':''}, ${how}. ${esc(d.note)} Tire casings vary, so follow your sealant label.${d.init?` For a NEW tire, Silca's initial fill is ${vfmt(d.init)} (new tires soak up sealant); after that the full dose above applies.`:''}${d.rep?` Silca Replenisher for this width: 1st top-up ${vfmt(d.rep[0])}, 2nd ${vfmt(d.rep[1])}, 3rd ${vfmt(d.rep[2])}.`:''}${d.url?` <a href="${d.url}" target="_blank" rel="noopener">Source</a>`:''}</p>`})()}</div>`;
+  ${(()=>{const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type);const how=d.src==='maker'?'from the maker\'s chart':(d.src==='secondary'?'from a second-hand report of the maker\'s advice, not verified':'a generic estimate, no maker amount found');return `<p class="mute">Full dose for ${t.widthMm} mm${d.product?' with '+esc(d.product):''}: ${vfmt(TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel))}${t.doseLevel==='light'?' (Light Race)':''}, ${how}. ${esc(d.note)} Tire casings vary, so follow your sealant label.${d.half&&d.chk?` Check the sealant about every ${d.chk} months. To top up, add about half a full dose (${vfmt(d.half)}); that half-dose rule is a common rule of thumb, not a maker figure.`:''}${d.init?` For a NEW tire, Silca's initial fill is ${vfmt(d.init)} (new tires soak up sealant); after that the full dose above applies.`:''}${d.rep?` Silca Replenisher for this width: 1st top-up ${vfmt(d.rep[0])}, 2nd ${vfmt(d.rep[1])}, 3rd ${vfmt(d.rep[2])}.`:''}${d.url?` <a href="${d.url}" target="_blank" rel="noopener">Source</a>`:''}</p>`})()}</div>`;
 }
 const cap=x=>x.replace(/\b\w/g,c=>c.toUpperCase());
 function datalists(){const b=[...new Set(TIRE_DB.map(e=>cap(e.brand)))],m=[...new Set(TIRE_DB.map(e=>cap(e.model)))];return `<datalist id="dl-brand">${b.map(x=>`<option value="${esc(x)}">`).join('')}</datalist><datalist id="dl-model">${m.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`}

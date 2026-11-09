@@ -84,6 +84,7 @@
  "products": [
   {
    "id": "stans-original",
+   "checkMonths": "3",
    "name": "Stan's Original / Race Day",
    "family": "Stan's",
    "formula": "Original and Race Day",
@@ -185,6 +186,7 @@
   },
   {
    "id": "stans-rolled-gold",
+   "checkMonths": "3",
    "name": "Stan's Rolled Gold",
    "family": "Stan's",
    "formula": "Rolled Gold",
@@ -267,6 +269,7 @@
   },
   {
    "id": "mucoff-road-gravel",
+   "checkMonths": "3 to 6",
    "name": "Muc-Off road and gravel",
    "family": "Muc-Off",
    "formula": "Road and Gravel",
@@ -340,6 +343,7 @@
   },
   {
    "id": "mucoff-mtb",
+   "checkMonths": "6",
    "name": "Muc-Off mountain bike",
    "family": "Muc-Off",
    "formula": "MTB",
@@ -411,6 +415,7 @@
   },
   {
    "id": "orange-regular",
+   "checkMonths": "3 to 6",
    "name": "Orange Seal Regular",
    "family": "Orange Seal",
    "formula": "Regular",
@@ -480,6 +485,7 @@
   },
   {
    "id": "orange-endurance",
+   "checkMonths": "3 to 6",
    "name": "Orange Seal Endurance",
    "family": "Orange Seal",
    "formula": "Endurance",
@@ -828,6 +834,7 @@
   },
   {
    "id": "silca-ultimate-2",
+   "checkMonths": "6",
    "name": "Silca Ultimate 2.0",
    "family": "Silca",
    "formula": "Ultimate 2.0",
@@ -911,6 +918,7 @@
   },
   {
    "id": "schwalbe-doc-blue-pro",
+   "checkMonths": "2 to 7",
    "name": "Schwalbe Doc Blue Professional",
    "family": "Schwalbe",
    "formula": "Doc Blue Professional",

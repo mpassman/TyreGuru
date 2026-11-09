@@ -16,7 +16,7 @@ class TireGuruField extends WatchUi.DataField {
 
     const STALE_DAYS = 3;
     const SEAL_LOW = 40.0;
-    const SEAL_OK = 70.0;
+    const SEAL_OK = 100.0;   // green starts at the recommended full dose
     const SWEEP_START = -135.0;
     const SWEEP = 270.0;
 
@@ -107,7 +107,7 @@ class TireGuruField extends WatchUi.DataField {
 
     function sealZone(pct) {
         if (pct < SEAL_LOW) { return 0; }
-        if (pct < SEAL_OK) { return 1; }
+        if (pct < SEAL_OK - 0.5) { return 1; }
         return 2;
     }
 
@@ -205,11 +205,11 @@ class TireGuruField extends WatchUi.DataField {
         var rad = dialRadius(cw, ch);
         var cy = y0 + 4 + rad;
         bezel(dc, cx, cy, rad);
-        band(dc, cx, cy, rad, 0.0, SEAL_LOW, 100.0, zoneColor(0));
-        band(dc, cx, cy, rad, SEAL_LOW, SEAL_OK, 100.0, zoneColor(1));
-        band(dc, cx, cy, rad, SEAL_OK, 100.0, 100.0, zoneColor(2));
+        band(dc, cx, cy, rad, 0.0, SEAL_LOW, 120.0, zoneColor(0));
+        band(dc, cx, cy, rad, SEAL_LOW, SEAL_OK, 120.0, zoneColor(1));
+        band(dc, cx, cy, rad, SEAL_OK, 120.0, 120.0, zoneColor(2));
         ticks(dc, cx, cy, rad);
-        needle(dc, cx, cy, rad, pct, 100.0);
+        needle(dc, cx, cy, rad, pct, 120.0);
         label(dc, cx, cy, rad, name, "SEALANT %");
         valueText(dc, cx, cy, rad, ch, y0, zoneWord(z) + " " + pct.format("%.0f") + "%", zoneColor(z));
     }

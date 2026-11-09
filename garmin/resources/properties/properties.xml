@@ -1,0 +1,16 @@
+<resources>
+    <properties>
+        <property id="frontPsi" type="float">0.0</property>
+        <property id="frontTgt" type="float">0.0</property>
+        <property id="rearPsi" type="float">0.0</property>
+        <property id="rearTgt" type="float">0.0</property>
+        <property id="maxPsi" type="float">0.0</property>
+        <property id="frontSeal" type="number">0</property>
+        <property id="rearSeal" type="number">0</property>
+        <property id="cbMode" type="boolean">false</property>
+        <property id="updated" type="number">0</property>
+        <property id="alarmMode" type="number">0</property>
+        <property id="dangerOn" type="boolean">true</property>
+        <property id="chirpOn" type="boolean">true</property>
+    </properties>
+</resources>

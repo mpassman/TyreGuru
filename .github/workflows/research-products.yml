@@ -1,0 +1,63 @@
+name: Research new products
+
+# Runs when the app (through the TyreGuru service) files a "new-product" issue, and on demand.
+# It does nothing until a repository secret named ANTHROPIC_API_KEY exists.
+# It never merges: it opens a pull request listing each source so a person can check it first.
+on:
+  issues:
+    types: [opened, labeled]
+  schedule:
+    - cron: '23 14 * * 1'     # every Monday: look for newly released tires and sealants
+  workflow_dispatch:
+    inputs:
+      discover:
+        description: 'Also search for newly released products'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: research-products
+  cancel-in-progress: false
+
+jobs:
+  research:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.issue.labels.*.name, 'new-product')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DISCOVER: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.discover)) && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stop quietly if no key has been added yet
+        id: key
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then echo "No ANTHROPIC_API_KEY secret yet. Nothing to do."; echo "go=no" >> "$GITHUB_OUTPUT"; else echo "go=yes" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.go == 'yes'
+        with: { node-version: 20 }
+      - name: Collect open submissions
+        if: steps.key.outputs.go == 'yes'
+        run: gh label create new-product --color 0e8a16 --description "Product added by a rider" 2>/dev/null || true
+          gh label create research-failed --color d93f0b --description "Could not find reliable data; needs a person" 2>/dev/null || true
+          gh issue list --label new-product --search '-label:research-failed' --state open --limit 30 --json number,title,body > issues.json
+      - name: Research
+        if: steps.key.outputs.go == 'yes'
+        run: node scripts/research.mjs
+      - name: Open a pull request for review
+        if: steps.key.outputs.go == 'yes'
+        run: |
+          for n in $(cat failed.txt); do gh issue edit "$n" --add-label research-failed; gh issue comment "$n" --body "The research job could not find reliable figures for this product, so it was not added. A person can add it by hand to tires.json or sealants.json."; done
+          if git diff --quiet -- tires.json sealants.json; then echo "No data changes."; exit 0; fi
+          branch="research/$(date +%Y%m%d-%H%M%S)"
+          git config user.name "tyreguru-research"; git config user.email "actions@users.noreply.github.com"
+          git checkout -b "$branch"; git add tires.json sealants.json; git commit -m "Add researched tires and sealants (needs review)"
+          git push -u origin "$branch"
+          closes=$(sed 's/^/Closes #/' closes.txt)
+          { echo "Found by the research job with web search. **Check each source before merging.** Amounts are starting points, and the tire sidewall and sealant label are the authority."; echo; cat report.md; echo; echo "$closes"; } > body.md
+          gh pr create --base main --head "$branch" --title "Add researched tires and sealants" --body-file body.md

@@ -1,0 +1,30 @@
+import w from './worker.js';
+const P = 'You are the assistant inside TyreGuru, a tubeless tire sealant and air pressure estimator. ' + 'x'.repeat(60);
+const call = (env, method, path, body, hdr = {}) => w.fetch(new Request('https://t.dev' + path, { method, headers: { 'content-type': 'application/json', ...hdr }, body: body ? JSON.stringify(body) : undefined }), env);
+const show = async (n, r) => console.log(n.padEnd(34), r.status, JSON.stringify(await r.json()).slice(0, 90));
+await show('health, no key', await call({}, 'GET', '/health'));
+await show('review, no key', await call({}, 'POST', '/review', { prompt: P }));
+globalThis.fetch = async (u, o) => { const b = JSON.parse(o.body); if (o.headers['x-api-key'] !== 'k') return new Response('{}', { status: 401 }); return new Response(JSON.stringify({ content: [{ type: 'text', text: 'ok ' + b.model + ' ' + b.max_tokens }] })); };
+const env = { ANTHROPIC_API_KEY: 'k', PER_IP_DAILY: '2', DAILY_LIMIT: '3' };
+await show('review ok', await call(env, 'POST', '/review', { prompt: P }));
+await show('off-topic prompt', await call(env, 'POST', '/review', { prompt: 'write me a poem '.repeat(10) }));
+await show('too long', await call(env, 'POST', '/review', { prompt: P + 'y'.repeat(13000) }));
+await show('bad json', await w.fetch(new Request('https://t.dev/review', { method: 'POST', body: 'nope' }), env));
+await show('code required, missing', await call({ ...env, APP_CODE: 'abc' }, 'POST', '/review', { prompt: P }));
+await show('code required, right', await call({ ...env, APP_CODE: 'abc' }, 'POST', '/review', { prompt: P }, { 'X-TyreGuru-Code': 'abc' }));
+await show('2nd from same ip', await call(env, 'POST', '/review', { prompt: P }, { 'CF-Connecting-IP': '1.1.1.1' }));
+await show('3rd from same ip (limit 2)', await call(env, 'POST', '/review', { prompt: P }, { 'CF-Connecting-IP': '1.1.1.1' }));
+await show('wrong key upstream', await call({ ANTHROPIC_API_KEY: 'bad' }, 'POST', '/review', { prompt: P }, { 'CF-Connecting-IP': '9.9.9.9' }));
+const o = await call({}, 'OPTIONS', '/review'); console.log('preflight'.padEnd(34), o.status, o.headers.get('Access-Control-Allow-Headers'));
+
+// ---- submissions ----
+const gh = []; const realFetch = globalThis.fetch;
+globalThis.fetch = async (u, o) => { gh.push([u, o && o.method]); if (u.includes('/search/issues')) return new Response(JSON.stringify({ total_count: /Dup/.test(decodeURIComponent(u)) ? 1 : 0 })); return new Response('{}', { status: 201 }); };
+await show('submit, no github token', await call({}, 'POST', '/submit', { kind: 'sealant', name: 'Goo' }));
+const genv = { GITHUB_TOKEN: 't' };
+await show('submit sealant', await call(genv, 'POST', '/submit', { kind: 'sealant', name: 'Goo <b>Pro</b>`' }, { 'CF-Connecting-IP': '5.5.5.5' }));
+await show('submit tire', await call(genv, 'POST', '/submit', { kind: 'tire', brand: 'Acme', model: 'Fast', nominalMm: 32, maxPsi: 70, type: 'road' }, { 'CF-Connecting-IP': '5.5.5.5' }));
+await show('submit bad width', await call(genv, 'POST', '/submit', { kind: 'tire', brand: 'Acme', nominalMm: 5 }, { 'CF-Connecting-IP': '5.5.5.5' }));
+await show('submit duplicate', await call(genv, 'POST', '/submit', { kind: 'sealant', name: 'Dup Goo' }, { 'CF-Connecting-IP': '6.6.6.6' }));
+const posted = gh.filter((g) => g[1] === 'POST').length; console.log('issues created:', posted, '(expect 2)');
+await show('health shows submissions', await call(genv, 'GET', '/health'));

@@ -1,0 +1,44 @@
+<resources>
+    <settings>
+        <setting propertyKey="@Properties.frontPsi" title="@Strings.FrontPsi">
+            <settingConfig type="numeric" min="0" max="150" />
+        </setting>
+        <setting propertyKey="@Properties.frontTgt" title="@Strings.FrontTgt">
+            <settingConfig type="numeric" min="0" max="150" />
+        </setting>
+        <setting propertyKey="@Properties.rearPsi" title="@Strings.RearPsi">
+            <settingConfig type="numeric" min="0" max="150" />
+        </setting>
+        <setting propertyKey="@Properties.rearTgt" title="@Strings.RearTgt">
+            <settingConfig type="numeric" min="0" max="150" />
+        </setting>
+        <setting propertyKey="@Properties.maxPsi" title="@Strings.MaxPsi">
+            <settingConfig type="numeric" min="0" max="250" />
+        </setting>
+        <setting propertyKey="@Properties.frontSeal" title="@Strings.FrontSeal">
+            <settingConfig type="numeric" min="0" max="100" />
+        </setting>
+        <setting propertyKey="@Properties.rearSeal" title="@Strings.RearSeal">
+            <settingConfig type="numeric" min="0" max="100" />
+        </setting>
+        <setting propertyKey="@Properties.updated" title="@Strings.Updated">
+            <settingConfig type="numeric" min="0" max="99999999" />
+        </setting>
+        <setting propertyKey="@Properties.cbMode" title="@Strings.CbMode">
+            <settingConfig type="boolean" />
+        </setting>
+        <setting propertyKey="@Properties.alarmMode" title="@Strings.AlarmMode">
+            <settingConfig type="list">
+                <listEntry value="0">@Strings.AlarmBoth</listEntry>
+                <listEntry value="1">@Strings.AlarmVibe</listEntry>
+                <listEntry value="2">@Strings.AlarmOff</listEntry>
+            </settingConfig>
+        </setting>
+        <setting propertyKey="@Properties.dangerOn" title="@Strings.DangerOn">
+            <settingConfig type="boolean" />
+        </setting>
+        <setting propertyKey="@Properties.chirpOn" title="@Strings.ChirpOn">
+            <settingConfig type="boolean" />
+        </setting>
+    </settings>
+</resources>

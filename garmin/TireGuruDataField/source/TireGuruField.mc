@@ -16,7 +16,7 @@ class TireGuruField extends WatchUi.DataField {
 
     const STALE_DAYS = 3;
     const SEAL_LOW = 40.0;
-    const SEAL_OK = 100.0;   // green starts at the recommended full dose
+    const SEAL_OK = 90.0;   // green starts at 90% of the recommended full dose (small buffer for drying)
     const SWEEP_START = -135.0;
     const SWEEP = 270.0;
 
@@ -107,7 +107,7 @@ class TireGuruField extends WatchUi.DataField {
 
     function sealZone(pct) {
         if (pct < SEAL_LOW) { return 0; }
-        if (pct < SEAL_OK - 0.5) { return 1; }
+        if (pct < SEAL_OK) { return 1; }
         return 2;
     }
 

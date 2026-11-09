@@ -936,7 +936,7 @@ function tireStatus(t){
 }
 function levelWord(x){
   const dose=x.fullMl||x.sl.doseMl||1,pct=x.sl.leftMl/dose;
-  const seal=x.sealRed?'Low':(pct<0.995?'OK':'Good');
+  const seal=x.sealRed?'Low':(pct<0.9?'OK':'Good');
   let air='No log';
   if(x.ar.known){const e=x.ar.estPsi,Z=x.Z;air=e<Z.low?'Low':(e<Z.good0?'OK':(e<=Z.good1?'Good':(e<=Z.over?'High':'Overfilled')))}
   const K={Low:'l',OK:'o',Good:'g',High:'h',Overfilled:'l'};return {seal,air,sealKey:K[seal],airKey:K[air],sealTxt:`${seal} - ${vR(x.sl.leftMl)} ${vU()}`,airTxt:x.ar.known?`${air} - ${Math.round(x.ar.estPsi*10)/10} PSI`:'No log yet'};
@@ -976,7 +976,7 @@ function gaugeRow(t,x,L,ex){ex=ex||{};
   const az=[[0,Z.low,'var(--zl)'],[Z.low,Z.good0,'var(--zo)'],[Z.good0,Z.good1,'var(--zg)'],[Z.good1,Z.over,'var(--zh)'],[Z.over,max,'var(--zl)','pv']];
   const full=TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel)||1,pct=Math.max(0,Math.min(100,Math.round(100*x.sl.leftMl/full)));
   const cv=ml=>US()?ml/29.5735:ml,steps=[.25,.5,1,1.5,2,2.5,5,10,15,20,25,30,50,100],stp=steps.find(q=>q*6>=cv(full)*1.2-1e-9)||100,smax=stp*6;
-  const sv=Math.min(smax,cv(x.sl.leftMl)),lowV=cv(full)*0.4,okV=cv(full);
+  const sv=Math.min(smax,cv(x.sl.leftMl)),lowV=cv(full)*0.4,okV=cv(full)*0.9;
   const air=gaugeSvg({id:'a'+t.wheel,max,tgt,unit:'PSI',alt:{mul:1/14.5038,unit:'BAR',steps:[.5,1,2,5]},v:x.ar.known?x.ar.estPsi:null,zones:az,aria:`Air pressure ${L.airTxt}, target ${Math.round(tgt*10)/10} PSI`});
   const sl=gaugeSvg({id:'s'+t.wheel,max:smax,tgt:null,unit:US()?'FL OZ':'ML',alt:US()?{mul:29.5735,unit:'ML',steps:[10,20,25,50,100,200]}:{mul:1/29.5735,unit:'FL OZ',steps:[.5,1,2,5]},v:sv,zones:[[0,lowV,'var(--zl)'],[lowV,okV,'var(--zo)'],[okV,smax,'var(--zg)']],aria:`Sealant ${vR(x.sl.leftMl)} ${vU()}, ${L.seal}`});
   return `<div class="gcard"><div class="gcol" style="${L.airKey?`color:var(--t${L.airKey})`:''}">${air}<b style="color:inherit">${L.airTxt}</b><small style="color:inherit">Target ${Math.round(tgt*10)/10} PSI</small>${ex.air||''}</div><div class="gcol" style="color:var(--t${L.sealKey})">${sl}<b style="color:inherit">${L.sealTxt}</b><small style="color:inherit">${pct}% of full dose (${vR(full)} ${vU()})</small>${ex.seal||''}</div></div>`}

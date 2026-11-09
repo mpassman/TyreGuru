@@ -696,8 +696,10 @@ function autoMax(t){
   if(e){t.maxPsi=e.psi;t.maxAuto=e.src}else if(t.maxAuto){t.maxPsi=0;t.maxAuto=null}
 }
 /* ---------- derived ---------- */
-/* ETRTO hookless maximum by nominal (printed) tire width, as reported by BikeRadar from the ETRTO standard. Widths 35 to 44 mm were not found. */
-function hooklessLimit(nom){return nom>=25&&nom<=29?72.5:nom>=30&&nom<=34?65:nom>=45&&nom<=54?43.5:null}
+/* Hookless maximum by nominal (printed) tire width. 25 to 34 and 45 to 54 mm: ETRTO, as reported by BikeRadar.
+   35 to 44 and 55 to 74 mm: Schwalbe's published hookless table (schwalbetires.com/technology-faq/hookless-rims), which follows the same steps. Schwalbe says it is its own test result, not an official approval. */
+function hooklessLimit(nom){return nom>=25&&nom<=29?72.5:nom>=30&&nom<=34?65:nom>=35&&nom<=39?58:nom>=40&&nom<=44?51:nom>=45&&nom<=54?43.5:nom>=55&&nom<=64?36:nom>=65&&nom<=74?29:null}
+function hooklessSrc(nom){return (nom>=25&&nom<=34)||(nom>=45&&nom<=54)?'the ETRTO hookless limit':'the hookless limit (Schwalbe table, ETRTO figure not found)'}
 const LIFE_KM={road:5000,gravel:4000,mtb:3000};
 const LIFE_DAYS=1095;
 function wear(t){
@@ -719,7 +721,7 @@ function advice(t){
   const cur={riderKg:S.rider.riderKg,bikeKg:S.rider.bikeKg,widthMm:t.widthMm,terrain:S.rider.terrain,wheel:t.wheel};
   const cal=t.cal&&t.cal.psi>0?t.cal:null;let tgt=est,fromSilca=false,calStale=false,scaled=false;
   if(cal){if(cal.terrain===S.rider.terrain){tgt=TG.calibratedPsi(cal,cur);fromSilca=true;scaled=(Math.abs(cal.kg-(S.rider.riderKg+S.rider.bikeKg))>0.05||cal.widthMm!==t.widthMm);}else calStale=true;}
-  const limits=[[t.maxPsi>0?t.maxPsi:Infinity,'the tire maximum'],[t.hookless&&hooklessLimit(t.nominalMm)?hooklessLimit(t.nominalMm):Infinity,'the ETRTO hookless limit for a '+t.nominalMm+' mm tire']];const lm=limits.reduce((m,x)=>x[0]<m[0]?x:m,[Infinity,'']);const lim=lm[0];const overLimit=isFinite(lim)&&tgt>lim;const tgtRaw=tgt;if(overLimit)tgt=lim;
+  const limits=[[t.maxPsi>0?t.maxPsi:Infinity,'the tire maximum'],[t.hookless&&hooklessLimit(t.nominalMm)?hooklessLimit(t.nominalMm):Infinity,hooklessSrc(t.nominalMm)+' for a '+t.nominalMm+' mm tire']];const lm=limits.reduce((m,x)=>x[0]<m[0]?x:m,[Infinity,'']);const lim=lm[0];const overLimit=isFinite(lim)&&tgt>lim;const tgtRaw=tgt;if(overLimit)tgt=lim;
   const fills=t.fills.slice().sort((x,y)=>x.dateMs-y.dateMs);
   const air=TG.airState({lastFill:fills[fills.length-1],fills,targetPsi:tgt,nowMs,nowC:rideC(),nowAltM:now.elevation!=null?now.elevation:null,a});
   if(air.known){air.fillTo=TG.fillForRide(tgt,20,rideC()!=null?rideC():20)}

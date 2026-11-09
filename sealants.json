@@ -276,22 +276,46 @@
    "dose": {
     "road": [
      [
+      23,
+      45
+     ],
+     [
       28,
-      67
+      45
+     ],
+     [
+      30,
+      75
+     ],
+     [
+      45,
+      75
      ],
      [
       50,
-      67
+      75
      ]
     ],
     "gravel": [
      [
+      23,
+      45
+     ],
+     [
       28,
-      67
+      45
+     ],
+     [
+      30,
+      75
+     ],
+     [
+      45,
+      75
      ],
      [
       50,
-      67
+      75
      ]
     ],
     "mtb": [
@@ -310,9 +334,9 @@
     ]
    },
    "lifeMaxDays": 180,
-   "src": "maker",
-   "srcUrl": "https://muc-off.com/products/no-puncture-hassle-tubeless-sealant",
-   "note": "Muc-Off lists 60 to 75 ml for 700c cross tires (midpoint used). It has no separate road or gravel chart."
+   "src": "secondary",
+   "srcUrl": "https://muc-off.com/blogs/how-to-hub/how-to-use-muc-off-no-puncture-hassle-tubeless-sealant",
+   "note": "Road 23-28c 30-60 ml (45 used), gravel 30-45c 70-80 ml (75 used), as summarized from Muc-Off's guide. Muc-Off's own product page lists 60-75 ml for 700c cross tires. Lasts 6+ months; check every 750 miles."
   },
   {
    "id": "mucoff-mtb",
@@ -323,22 +347,46 @@
    "dose": {
     "road": [
      [
+      23,
+      45
+     ],
+     [
       28,
-      67
+      45
+     ],
+     [
+      30,
+      75
+     ],
+     [
+      45,
+      75
      ],
      [
       50,
-      67
+      75
      ]
     ],
     "gravel": [
      [
+      23,
+      45
+     ],
+     [
       28,
-      67
+      45
+     ],
+     [
+      30,
+      75
+     ],
+     [
+      45,
+      75
      ],
      [
       50,
-      67
+      75
      ]
     ],
     "mtb": [
@@ -358,8 +406,8 @@
    },
    "lifeMaxDays": 180,
    "src": "maker",
-   "srcUrl": "https://muc-off.com/products/no-puncture-hassle-tubeless-sealant",
-   "note": "60 to 75 ml for 26 and 27.5 inch, 105 to 140 ml for 29 inch (midpoints used)."
+   "srcUrl": "https://muc-off.com/blogs/how-to-hub/how-to-use-muc-off-no-puncture-hassle-tubeless-sealant",
+   "note": "60-75 ml for 26 and 27.5 inch, 105-140 ml for 29 inch, downhill 120-140 ml (midpoints used). Lasts 6+ months."
   },
   {
    "id": "orange-regular",
@@ -373,7 +421,7 @@
     "road": [
      [
       28,
-      50
+      45
      ],
      [
       32,
@@ -395,7 +443,7 @@
     "gravel": [
      [
       28,
-      50
+      45
      ],
      [
       32,
@@ -425,9 +473,10 @@
      ]
     ]
    },
+   "lifeMaxDays": 180,
    "src": "secondary",
    "srcUrl": "https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",
-   "note": "Only 3 oz (26 and 27.5 inch) and 4 oz (29 inch) found, quoted by a reviewer. Road and gravel use the generic dose."
+   "note": "From summaries of Orange Seal guidance: road 28 mm 30-59 ml (45 used), 27.5 in about 3 oz, 29 in about 4 oz. Other widths use the generic dose. Typically lasts 3 to 6 months; top up 1-2 oz when the slosh drops."
   },
   {
    "id": "orange-endurance",
@@ -439,7 +488,7 @@
     "road": [
      [
       28,
-      50
+      45
      ],
      [
       32,
@@ -461,7 +510,7 @@
     "gravel": [
      [
       28,
-      50
+      45
      ],
      [
       32,
@@ -491,9 +540,10 @@
      ]
     ]
    },
+   "lifeMaxDays": 180,
    "src": "secondary",
    "srcUrl": "https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",
-   "note": "Same amounts as Regular. No separate Endurance figure found."
+   "note": "Same amounts as Regular; no separate Endurance figures found. Typically lasts 3 to 6 months; top up 1-2 oz when the slosh drops."
   },
   {
    "id": "silca-ultimate-original",

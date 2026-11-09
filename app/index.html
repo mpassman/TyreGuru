@@ -80,6 +80,7 @@ const TG = (() => {
     airTolPct: 0.05,
     learnWeight: 0.6,
     dayPerKm: 0.02,          // wear: effective days of sealant use per km (hypothesis)
+    trafficMaxC: 1.0,        // most a traffic jam can add to road temperature, degrees C (hypothesis, not measured)
     mlPerSealEvent: 3,       // sealant used up by one puncture seal (hypothesis)
     roadK: 0.45, absAsphalt: 0.85,        // how far one sealant check moves the life estimate
   };
@@ -243,7 +244,7 @@ const TG = (() => {
       level: c.level, eff: effectiveDays(fromMs, c.dateMs, rides, a).eff * cond }));
     const L = learnedLife(prior, myChecks, a);
     const frac = clamp(1 - eff / L.life, 0, 1);
-    const events = (sealant.events || []).filter(e => e.dateMs >= fromMs);
+    const events = (sealant.events || []).filter(e => e.dateMs >= fromMs - 12 * 3600e3);
     const eventMl = events.reduce((s0, e) => s0 + (e.ml || a.mlPerSealEvent), 0);
     const left = Math.max(0, dose * frac - eventMl);
     const needAdd = left < a.triggerFraction * dose || frac <= 0;
@@ -252,7 +253,7 @@ const TG = (() => {
       : Math.round((L.life * (1 - a.triggerFraction) - eff) / Math.max(0.5, heat.days > 0 ? eff / heat.days : 1));
     const unc = clamp(0.35 - 0.1 * L.n, 0.12, 0.35);   // share of the estimate
     return {
-      eventMl, eventCount: events.length, leftMl: left, lowMl: left * (1 - unc), highMl: Math.min(dose, left * (1 + unc)), frac, needAdd, addMl,
+      levelFrac: dose > 0 ? clamp(left / dose, 0, 1) : 0, eventMl, eventCount: events.filter(e => e.kind !== 'removed').length, leftMl: left, lowMl: left * (1 - unc), highMl: Math.min(dose, left * (1 + unc)), frac, needAdd, addMl,
       effDays: eff, lifeDays: L.life, checksUsed: L.n, days: heat.days, rideHours: heat.rideHours,
       rideCount: heat.rideCount, avgRideC: heat.avgRideC, daysToTrigger, fullMl: full, doseMl: dose,
       confidence: L.n >= 2 ? 'medium' : L.n === 1 ? 'low to medium' : 'low'
@@ -612,7 +613,11 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const DAY=86400000, KEY='tireguru.v1';
 let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={airC:null,roadC:null,elevation:null,note:''};
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
-const toMs=d=>Date.parse(d+'T12:00:00');
+const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
+/* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
+const BUILD='2026-11-09 h';
+const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
+const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
 function example(){
   const t=Date.now();
@@ -689,7 +694,21 @@ function typeGuess(t){const m=((t.brand||'')+' '+(t.model||'')).toLowerCase(),n=
   return null}
 function autoWeight(){if(!S.rider.wManual&&S.weights.length)S.rider.riderKg=+S.weights[S.weights.length-1].kg.toFixed(1)}
 function autoTerrain(){if(!S.rider.terrManual&&S.tires[0]){const m={road:'worn',gravel:'gravel1',mtb:'mtb'}[S.tires[0].type];if(m)S.rider.terrain=m}}
+/* the rider's own additions: tires and sealants that are not on the built-in lists */
+const cust=()=>{S.custom=S.custom||{};S.custom.sealants=S.custom.sealants||[];S.custom.tires=S.custom.tires||[];return S.custom};
+const sealantNames=()=>[...new Set(TG.BRANDS.filter(x=>x!=='Other').concat(cust().sealants))];
+function addCustomSealant(name){name=(name||'').trim().replace(/\s+/g,' ');if(name.length<2)return false;
+  if(TG.BRANDS.concat(cust().sealants).some(x=>x.toLowerCase()===name.toLowerCase()))return false;cust().sealants.push(name);return true}
+function addCustomTire(t){let b=(t.brand||'').trim(),m=(t.model||'').trim();if(!b||/^example/i.test(b))return false;if(/^example/i.test(m))m='';const c=cust().tires,nom=+t.nominalMm||0;
+  if(lookupMax(Object.assign({},t,{_skipCustom:true})))return false;
+  let e=t.customId&&c.find(x=>x.id===t.customId);
+  if(!e)e=c.find(x=>x.brand.toLowerCase()===b.toLowerCase()&&x.model.toLowerCase()===m.toLowerCase()&&Math.abs(x.nominal-nom)<=1);
+  if(!e){e={id:'c'+Date.now().toString(36)+c.length,brand:b,model:m,nominal:nom,psi:0};c.push(e)}
+  t.customId=e.id;e.brand=b;e.model=m;e.nominal=nom;if(t.maxManual&&t.maxPsi>0)e.psi=t.maxPsi;return true}
 function lookupMax(t){
+  if(!t._skipCustom){const cb=(t.brand||'').trim().toLowerCase(),cm=(t.model||'').trim().toLowerCase();
+    const ce=cb&&cust().tires.find(x=>x.psi>0&&x.brand.toLowerCase()===cb&&x.model.toLowerCase()===cm&&Math.abs(x.nominal-(+t.nominalMm))<=1);
+    if(ce)return {psi:ce.psi,src:'your own tire list'}}
   const b=tok(t.brand),m=tok(t.model);let best=null;
   for(const e of TIRE_DB){
     if(Math.abs(e.nominal-(+t.nominalMm))>(e.tol||0))continue;
@@ -755,7 +774,7 @@ function card(t){
   <p class="mute" style="margin:4px 0 0">${ar.days.toFixed(0)} days since last fill · leak ${ar.leak.pct.toFixed(1)}%/day (${ar.leak.n?`learned from ${ar.leak.n} intervals`:'starting guess'}) · confidence ${ar.confidence}</p>${limNote}${noE}${limLine}</div>`;
   const red=s.needAdd;
   const sealCard=`<div class="card big ${red?'red':'green'}"><div class="row" style="align-items:center"><div><span class="tag ${red?'red':'green'}">${red?'Fix needed':'OK'}</span><h2 style="margin-top:6px">Sealant</h2></div><div style="text-align:right"><div class="num">${vR(s.leftMl)} <small style="font-size:16px">${vU()} est.</small></div><div class="mute">range ${vR(s.lowMl)} to ${vR(s.highMl)} of ${vR(s.doseMl)} ${vU()}</div></div></div>
-  ${bar(s.frac,red)}
+  ${bar(s.levelFrac,red)}
   <p style="margin:8px 0 0"><b>${red?`Add ${vfmt(s.addMl)} of sealant, then ride a few minutes to spread it.`:`Sealant looks fine. About ${s.daysToTrigger} days until the next check at current use.`}</b></p>
   <p class="mute" style="margin:4px 0 0">${t.sealant.brand||'Sealant brand not set'} applied ${fmtD(t.sealant.dateMs)} · ${s.rideCount} rides, ${s.rideHours.toFixed(0)} h in range · heat-adjusted age ${s.effDays.toFixed(0)} of ${s.lifeDays.toFixed(0)} days · ${s.eventCount} seals logged · confidence ${s.confidence}</p></div>`;
   const w=wear(t);return `<h3>${t.wheel==='front'?'Front':'Rear'} · ${esc((t.brand+' '+(t.model||'')).trim())} · ${t.widthMm} mm</h3><p class="mute" style="margin:0">${dR(w.km)} ${dU()} on this tire, ${Math.round(w.f*100)}% of an assumed ${dR(w.life)} ${dU()} life, installed ${w.days<60?w.days+' days':Math.round(w.days/30.4)+' months'} ago · condition ${w.cond}</p>${airCard}${sealCard}`;
@@ -764,9 +783,9 @@ function viewHome(){
   if(detail!==null&&S.tires[detail])return viewDetail(detail);
   const ex=S.example?`<div class="ex"><b>Example data.</b> These numbers use a made-up bike and rides so you can see how it works. Open Settings to enter your bike and import rides. <button class="ghost" data-act="clearex" style="margin-left:6px;padding:3px 8px">Remove example</button></div>`:'';
   const cond=`<div class="card"><h3 style="margin-top:0">Riding conditions</h3><div class="row"><div><label for="nowC">Air temperature for the ride, ${tU()}</label><input id="nowC" type="number" step="1" value="${now.airC!=null?Math.round(tF(now.airC)):(S.nowC!==''&&S.nowC!=null?Math.round(tF(+S.nowC)):'')}" placeholder="optional"></div><div style="align-self:end"><button data-act="nowwx">Get current weather</button></div></div>
-  ${now.airC!=null?`<p class="mute" style="margin:6px 0 0">Air ${tF(now.airC).toFixed(0)} ${tU()} · estimated road surface ${tF(now.roadC).toFixed(0)} ${tU()} · elevation ${now.elevation!=null?Math.round(eI(now.elevation))+' '+eU():'unknown'}</p>`:''}<p class="mute" style="margin:6px 0 0">${esc(msg.now||'')}</p></div>`;
+  ${now.airC!=null?`<p class="mute" style="margin:6px 0 0">Air ${tF(now.airC).toFixed(0)} ${tU()} · estimated road surface ${tF(now.roadC).toFixed(0)} ${tU()} · elevation ${now.elevation!=null?Math.round(eI(now.elevation))+' '+eU():'unknown'}${trafficLine()}</p>`:''}<p class="mute" style="margin:6px 0 0">${esc(msg.now||'')}</p></div>`;
   const ai=`<div class="card"><h3 style="margin-top:0">AI check</h3><p class="mute" style="margin:0 0 8px">Claude reviews the numbers above together with your rides and logs, and says what it would do and why. The red and green decisions above always come from the calculation, so the app still works without AI.</p><button data-act="ai" ${aiBusy?'disabled':''}>${aiBusy?'Thinking…':'Ask the AI to review'}</button>${aiOut?`<div style="margin-top:10px">${aiOut}</div>`:''}</div>`;
-  return bikeBar()+ex+S.tires.map(sumCard).join('')+cond+ai+`<p class="mute">Estimates only. Look and feel for sealant at least once a season, and check pressure with a gauge before rides that matter. Safety comes first.</p>`;
+  return bikeBar()+alertBanner()+ex+S.tires.map(sumCard).join('')+cond+ai+`<p class="mute">Estimates only. Look and feel for sealant at least once a season, and check pressure with a gauge before rides that matter. Safety comes first.</p>`;
 }
 function tireForm(t){
   const i=S.tires.indexOf(t),n=`t${i}`,same=t.wheel==='rear'&&S.rearSame!==false,sameS=t.wheel==='rear'&&S.sealSame!==false;
@@ -776,7 +795,8 @@ function tireForm(t){
   <div><label for="${n}y">Tire type</label><select id="${n}y" data-f="tires.${i}.type">${[['road','Road'],['gravel','Gravel'],['mtb','Mountain bike']].map(([v,l])=>`<option value="${v}" ${t.type===v?'selected':''}>${l}</option>`).join('')}</select></div>
   <div><label for="${n}w">Measured width, mm</label><input id="${n}w" type="number" data-f="tires.${i}.widthMm" value="${t.widthMm}"></div>
   <div><label for="${n}nw">Printed (nominal) width, mm. Mountain bike: ETRTO number, e.g. 61 for 2.4 in</label><input id="${n}nw" type="number" data-f="tires.${i}.nominalMm" value="${t.nominalMm||''}"></div>
-  <div><label for="${n}r">Rim inner width, mm</label><input id="${n}r" type="number" data-f="tires.${i}.rimMm" value="${t.rimMm}"></div></div>`}
+  <div><label for="${n}r">Rim inner width, mm</label><input id="${n}r" type="number" data-f="tires.${i}.rimMm" value="${t.rimMm}"></div></div>
+  <p class="mute" style="margin:4px 0">Tire not in the list? Type its brand and model, then the printed width and the maximum pressure on the sidewall. The app adds it to your own tire list and remembers that maximum. <a href="https://www.google.com/search?q=${encodeURIComponent(((t.brand||'')+' '+(t.model||'')+' '+(t.nominalMm||'')+' mm tire maximum pressure psi').trim())}" target="_blank" rel="noopener">Search the web for this tire</a></p>`}
   <div class="row"><div><label for="${n}i">Tire installed on</label><input id="${n}i" type="date" data-d="tires.${i}.installMs" value="${fmtD(t.installMs)}"></div>
   <div><label for="${n}c">Tire condition</label><select id="${n}c" data-f="tires.${i}.condition">${['auto','new','good','fair','poor'].map(c=>`<option value="${c}" ${t.condition===c?'selected':''}>${c==='auto'?'Automatic, from install date and mileage':c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}</select></div></div>
   ${(()=>{const w=wear(t);const mo=Math.round(w.days/30.4);return `<p class="mute">Condition is worked out from the install date and the rides since then (from Strava, Garmin files, Apple Health, Intervals.icu or rides you log). ${dR(w.km)} ${dU()} ridden since ${fmtD(t.installMs)}: ${Math.round(w.f*100)}% of an assumed ${dR(w.life)} ${dU()} life for a ${t.type==='mtb'?'mountain bike':t.type} tire. Installed ${mo===1?'1 month':mo+' months'} ago: ${Math.round(w.fa*100)}% of an assumed ${Math.round(LIFE_DAYS/365)} year age limit. The higher of the two sets the condition, which is ${w.cond}${w.manual?' (set by you)':(w.cond==='new'?'':` (driven by ${w.by})`)}. These tire lives are rough assumptions, not tested.${w.noKm?` ${w.noKm} rides have no distance and are not counted.`:''}${S.rides.length===0?' Connect Strava or import rides in Settings, Data so mileage counts.':''}</p>`})()}
@@ -785,21 +805,22 @@ function tireForm(t){
   <div><label for="${n}h">Rim type</label><select id="${n}h" data-f="tires.${i}.hookless"><option value="" ${!t.hookless?'selected':''}>Hooked or not sure</option><option value="1" ${t.hookless?'selected':''}>Hookless (ETRTO limit by tire width)</option></select></div></div>`}
   <p class="mute">${(()=>{const e=lookupMax(t);return t.maxAuto&&e?`Tire maximum filled in from the app's tire list for ${esc(t.brand)} ${esc(t.model)} at ${t.nominalMm} mm (source: ${e.src}). Confirm it against the sidewall of your tire.`:(t.maxPsi>0?'Tire maximum entered by you.':'This tire is not in the app\'s list yet. Enter the maximum pressure printed on the sidewall.')})()}</p>
   <p class="mute">Limits applied automatically: the tire maximum above, and for hookless rims the ETRTO limit for the printed width. The app does not check the rim's own maximum, because no ETRTO figure for hooked rims was found. Check the label on your rim.</p>
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h3 style="margin:0">Sealant in this tire</h3>${t.wheel==='rear'?`<select aria-label="Rear sealant choice" data-ss="1"><option value="1" ${S.sealSame!==false?'selected':''}>Same as front</option><option value="0" ${S.sealSame===false?'selected':''}>Different from front</option></select>`:''}</div>${sameS?`<p class="mute">Same sealant as the front: <b>${esc(t.sealant.brand||'brand not set')}</b>, ${vfmt(t.sealant.ml)}, applied ${fmtD(t.sealant.dateMs)}. To change it, edit the front tire's sealant or choose Different from front.</p>`:`<div class="row"><div><label for="${n}sb">Sealant brand</label><select id="${n}sb" data-f="tires.${i}.sealant.brand"><option value="" ${!t.sealant.brand?'selected':''}>Choose a brand</option>${TG.BRANDS.map(c=>`<option ${t.sealant.brand===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h3 style="margin:0">Sealant in this tire</h3>${t.wheel==='rear'?`<select aria-label="Rear sealant choice" data-ss="1"><option value="1" ${S.sealSame!==false?'selected':''}>Same as front</option><option value="0" ${S.sealSame===false?'selected':''}>Different from front</option></select>`:''}</div>${sameS?`<p class="mute">Same sealant as the front: <b>${esc(t.sealant.brand||'brand not set')}</b>, ${vfmt(t.sealant.ml)}, applied ${fmtD(t.sealant.dateMs)}. To change it, edit the front tire's sealant or choose Different from front.</p>`:`<div class="row"><div><label for="${n}sb">Sealant brand</label><input id="${n}sb" list="dl-sealant" data-f="tires.${i}.sealant.brand" data-cs="1" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" value="${esc(t.sealant.brand||'')}" placeholder="Type to search, or add your own"></div>
   <div><label for="${n}sd">Date last applied</label><input id="${n}sd" type="date" data-d="tires.${i}.sealant.dateMs" value="${fmtD(t.sealant.dateMs)}"></div>
   <div><label for="${n}sm">Amount put in, ${vU()}</label><input id="${n}sm" type="number" step="${US()?0.1:1}" data-sv="tires.${i}.sealant.ml" value="${vR(t.sealant.ml)}"></div></div>`}
+  <p class="mute" style="margin:4px 0">Type to search the list. A sealant that is not listed is added to your own list when you finish typing it. The app uses a generic amount until you set the amount above, so follow the label on the bottle. <a href="https://www.google.com/search?q=${encodeURIComponent((t.sealant.brand||'tubeless sealant')+' how much sealant per tire maximum puncture size')}" target="_blank" rel="noopener">Search the web for this sealant</a></p>
   <div class="row"><div><label for="dl${i}">Sealant level</label><select id="dl${i}" data-f="tires.${i}.doseLevel">${Object.entries(TG.DOSE_LEVELS).map(([k,v])=>`<option value="${k}" ${(t.doseLevel||'standard')===k?'selected':''}>${esc(v.label)}</option>`).join('')}</select></div></div>
   ${(()=>{const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type);const how=d.src==='maker'?'from the maker\'s chart':(d.src==='secondary'?'from a second-hand report of the maker\'s advice, not verified':'a generic estimate, no maker amount found');return `<p class="mute">Full dose for ${t.widthMm} mm${d.product?' with '+esc(d.product):''}: ${vfmt(TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel))}${t.doseLevel==='light'?' (Light Race)':''}, ${how}. ${esc(d.note)} Tire casings vary, so follow your sealant label.${d.half&&d.chk?` Check the sealant about every ${d.chk} months. To top up, add about half a full dose (${vfmt(d.half)}); that half-dose rule is a common rule of thumb, not a maker figure.`:''}${d.initEst?` For a NEW tire, start with about ${vfmt(d.init)}. New tires soak up sealant, and Silca's own charts call for roughly 10 to 20% more on the first fill (an estimate for this sealant). After that the full dose above applies.`:` For a NEW tire, Silca's initial fill is ${vfmt(d.init)} (new tires soak up sealant); after that the full dose above applies.`}${d.rep?` Silca Replenisher for this width: 1st top-up ${vfmt(d.rep[0])}, 2nd ${vfmt(d.rep[1])}, 3rd ${vfmt(d.rep[2])}.`:''}${d.url?` <a href="${d.url}" target="_blank" rel="noopener">Source</a>`:''}</p>`})()}</div>`;
 }
 const cap=x=>x.replace(/\b\w/g,c=>c.toUpperCase());
-function datalists(){const b=[...new Set(TIRE_DB.map(e=>cap(e.brand)))],m=[...new Set(TIRE_DB.map(e=>cap(e.model)))];return `<datalist id="dl-brand">${b.map(x=>`<option value="${esc(x)}">`).join('')}</datalist><datalist id="dl-model">${m.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`}
+function datalists(){const b=[...new Set(TIRE_DB.map(e=>cap(e.brand)).concat(cust().tires.map(e=>e.brand)))],m=[...new Set(TIRE_DB.map(e=>cap(e.model)).concat(cust().tires.map(e=>e.model).filter(Boolean)))];return `<datalist id="dl-sealant">${sealantNames().map(x=>`<option value="${esc(x)}">`).join('')}</datalist><datalist id="dl-brand">${b.map(x=>`<option value="${esc(x)}">`).join('')}</datalist><datalist id="dl-model">${m.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`}
 function changeForm(i){
   const t=S.tires[i];
   return `<div class="card" style="border:2px solid var(--frame)"><h2>New ${t.wheel} tire</h2><p class="mute" style="margin-top:0">Enter the tire you just put on. The old tire is saved to your tire history with its mileage. The new tire starts with a clean sealant, air and wear record.</p>
   <div class="row"><div><label for="c_b">Brand</label><input id="c_b" list="dl-brand" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="e.g. Pirelli"></div><div><label for="c_m">Model</label><input id="c_m" list="dl-model" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="e.g. P Zero Race TLR 4S"></div>
   <div><label for="c_y">Tire type</label><select id="c_y"><option value="">Automatic, from model and width</option><option value="road">Road</option><option value="gravel">Gravel</option><option value="mtb">Mountain bike</option></select></div></div>
   <div class="row"><div><label for="c_n">Printed width, mm</label><input id="c_n" type="number" placeholder="e.g. 32"></div><div><label for="c_w">Measured width, mm</label><input id="c_w" type="number" placeholder="e.g. 31"></div><div><label for="c_d">Installed on</label><input id="c_d" type="date" value="${fmtD(Date.now())}"></div></div>
-  <div class="row"><div><label for="c_sb">Sealant brand</label><select id="c_sb"><option value="">Choose a brand</option>${TG.BRANDS.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div><label for="c_sm">Sealant put in, ${vU()}</label><input id="c_sm" type="number" step="0.1" placeholder="e.g. ${US()?2:60}"></div></div>
+  <div class="row"><div><label for="c_sb">Sealant brand</label><input id="c_sb" list="dl-sealant" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="Type to search, or add your own"></div><div><label for="c_sm">Sealant put in, ${vU()}</label><input id="c_sm" type="number" step="0.1" placeholder="e.g. ${US()?2:60}"></div></div>
   <p class="mute" id="cmsg" aria-live="polite">${esc(msg.chg||'')}</p>
   <div style="display:flex;gap:6px;flex-wrap:wrap"><button data-act="chgsave" data-i="${i}">Save new tire</button><button class="ghost" data-act="chgcancel">Cancel</button></div></div>`;
 }
@@ -821,11 +842,46 @@ function garminCard(){
   const f=S.tires.find(t=>t.wheel==='front')||S.tires[0],r=S.tires.find(t=>t.wheel==='rear')||S.tires[1]||f;
   const get=t=>{const x=tireStatus(t),A=x.A,full=TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel)||1,L=levelWord(x);return {now:x.ar.known?Math.round(x.ar.estPsi*10)/10:0,tgt:Math.round(A.tgt*10)/10,seal:Math.max(0,Math.min(100,Math.round(100*x.sl.leftMl/full))),air:L.airTxt,sealWord:L.seal}};
   const x0=tireStatus(f),F=get(f),R=get(r),d=new Date(),ymd=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
-  const xml=`<resources>\n  <properties>\n    <property id="frontPsi" type="float">${F.now.toFixed(1)}</property>\n    <property id="frontTgt" type="float">${F.tgt.toFixed(1)}</property>\n    <property id="rearPsi" type="float">${R.now.toFixed(1)}</property>\n    <property id="rearTgt" type="float">${R.tgt.toFixed(1)}</property>\n    <property id="maxPsi" type="float">${isFinite(x0.A.lim)?x0.A.lim.toFixed(1):'0.0'}</property>\n    <property id="frontSeal" type="number">${F.seal}</property>\n    <property id="rearSeal" type="number">${R.seal}</property>\n    <property id="updated" type="number">${ymd}</property>\n  </properties>\n</resources>`;
+  const xml=`<resources>\n  <properties>\n    <property id="frontPsi" type="float">${F.now.toFixed(1)}</property>\n    <property id="frontTgt" type="float">${F.tgt.toFixed(1)}</property>\n    <property id="rearPsi" type="float">${R.now.toFixed(1)}</property>\n    <property id="rearTgt" type="float">${R.tgt.toFixed(1)}</property>\n    <property id="maxPsi" type="float">${isFinite(x0.A.lim)?x0.A.lim.toFixed(1):'0.0'}</property>\n    <property id="frontSeal" type="number">${F.seal}</property>\n    <property id="rearSeal" type="number">${R.seal}</property>\n    <property id="updated" type="number">${ymd}</property>\n    <property id="alarmMode" type="number">${({both:0,vibrate:1,off:2})[AL().mode]||0}</property>\n    <property id="dangerOn" type="boolean">${AL().danger}</property>\n    <property id="chirpOn" type="boolean">${AL().chirp}</property>\n  </properties>\n</resources>`;
   return `<div class="card"><h2>Garmin Edge data field</h2><p class="mute" style="margin-top:0">Type these numbers into the TyreGuru data field's settings in the Garmin Connect app before a ride. The Edge shows the status (Good, OK, Low) from them. If settings do not appear for a sideloaded field, paste the block below into <b>resources/properties/properties.xml</b> and rebuild. These are estimates from this app, or your last gauge reading, not live readings from the tires.</p>
   <div class="scroll"><table><thead><tr><th></th><th>Air now, PSI</th><th>Target PSI</th><th>Sealant left</th></tr></thead><tbody><tr><td>Front</td><td>${F.now?F.now.toFixed(1):'no log'}</td><td>${F.tgt.toFixed(1)}</td><td>${F.seal}%</td></tr><tr><td>Rear</td><td>${R.now?R.now.toFixed(1):'no log'}</td><td>${R.tgt.toFixed(1)}</td><td>${R.seal}%</td></tr></tbody></table></div>
-  <p class="mute">Tire maximum PSI for the field: ${isFinite(x0.A.lim)?x0.A.lim:'none set (the field uses target + 4 x tolerance)'}.</p><p class="mute">The Edge will show: Front ${F.air}, Rear ${R.air}; sealant ${F.sealWord} (front), ${R.sealWord} (rear). Updated date for the settings: ${ymd}</p>
-  <details><summary>properties.xml block</summary><textarea readonly rows="13" style="width:100%;font:12px ui-monospace,monospace">${esc(xml)}</textarea></details></div>`}
+  <p class="mute">Tire maximum PSI for the field: ${isFinite(x0.A.lim)?x0.A.lim:'none set (the field uses target + 4 x tolerance)'}.</p><p class="mute">The Edge sounds the alarm once when a dial turns red and chirps once when both tires are optimal. Alert sound on the Edge: ${({both:'sound and vibration',vibrate:'vibration only',off:'silent'})[AL().mode]||'sound and vibration'}; danger alarm ${AL().danger?'on':'off'}; chirp ${AL().chirp?'on':'off'}. Set the same in the field's Garmin Connect settings.</p><p class="mute">The Edge will show: Front ${F.air}, Rear ${R.air}; sealant ${F.sealWord} (front), ${R.sealWord} (rear). Updated date for the settings: ${ymd}</p>
+  <details><summary>properties.xml block</summary><textarea readonly rows="16" style="width:100%;font:12px ui-monospace,monospace">${esc(xml)}</textarea></details></div>`}
+/* ---------- traffic: optional, nudges the road temperature estimate up in heavy traffic ---------- */
+const AI_URL_DEFAULT='';   // paste your deployed AI review address here to ship it built in, or leave empty and enter it in the app (Data tab)
+const aiS=()=>{S.ai=S.ai||{url:'',code:''};return S.ai};
+const aiUrl=()=>((aiS().url||AI_URL_DEFAULT)+'').trim().replace(/\/+$/,'');
+async function aiProxy(path,opt){const x=aiS();const h=Object.assign({'Content-Type':'application/json'},x.code?{'X-TyreGuru-Code':x.code}:{});
+  const r=await net(aiUrl()+path,Object.assign({headers:h},opt||{}));let j=null;try{j=JSON.parse(r.text)}catch(e){}return {status:r.status,j}}
+function aiServiceCard(){const x=aiS(),m=msg.aisvc||'';
+  return `<div class="card"><h2>AI review service</h2><p class="mute" style="margin-top:0">The Ask the AI button on Home works inside Claude. To use it from this app by itself, deploy the small service in the <code>ai-proxy</code> folder of the TyreGuru repository and paste its address here. The service holds the Anthropic key, never this app. With no address set, or no key added to the service yet, the button just says it is not switched on and everything else works as normal.</p>
+  <label for="aiu">Service address</label><input id="aiu" data-aiu="1" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="https://tyreguru-ai.yourname.workers.dev" value="${esc(x.url||'')}">
+  <label for="aic" style="margin-top:8px">Access code (only if you set one)</label><input id="aic" data-aic="1" type="password" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(x.code||'')}">
+  <div style="margin-top:8px"><button data-act="aitest"${aiUrl()?'':' disabled'}>Test the service</button></div>
+  <p class="mute" id="aimsg" aria-live="polite" style="margin:8px 0 0">${esc(m)}</p>
+  <p class="mute" style="margin:6px 0 0">Your address and code stay on this device and are left out of backups. When you press Ask the AI, the review text (your tires, sealant and air estimates and recent ride summaries from your own files) is sent to the service and on to Anthropic. Nothing from Strava or other connected services is ever included.</p></div>`}
+const trf=()=>{S.traffic=S.traffic||{key:'',on:false};return S.traffic};
+async function trafficFlow(loc){const x=trf();if(!x.key)throw new Error('Add a TomTom key first.');
+  const pt=(Math.round(loc.lat*1000)/1000)+','+(Math.round(loc.lon*1000)/1000);
+  const r=await net('https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?key='+encodeURIComponent(x.key)+'&point='+pt+'&unit=kmph');
+  if(r.status===403||r.status===401)throw new Error('TomTom did not accept that key.');
+  if(r.status===429)throw new Error('TomTom says too many requests. Try again later.');
+  if(r.status!==200)throw new Error('TomTom returned an error ('+r.status+').');
+  let j;try{j=JSON.parse(r.text).flowSegmentData}catch(e){j=null}
+  if(!j||!(j.freeFlowSpeed>0))throw new Error('No traffic data came back for this spot.');
+  return {cur:j.currentSpeed,free:j.freeFlowSpeed,conf:j.confidence,closed:!!j.roadClosure,ms:Date.now()}}
+async function nowWithTraffic(){const c=await ENV.nowConditions(S.home,S.rider.surface,S.a);c.traffic=null;const x=trf();
+  if(x.on&&x.key){try{const f=await trafficFlow(S.home);const cong=f.closed||(f.conf!=null&&f.conf<0.5)?0:Math.max(0,Math.min(1,1-f.cur/f.free)),adj=(S.a.trafficMaxC||0)*cong;
+      c.roadBaseC=c.roadC;c.roadC=c.roadC+adj;c.traffic={cur:f.cur,free:f.free,cong,adj,ms:f.ms,conf:f.conf}}catch(e){c.traffic={err:e.message}}}
+  return c}
+function trafficLine(){const t=now.traffic;if(!t)return '';if(t.err)return ' · traffic: '+esc(t.err);return ' · traffic moving at '+Math.round(t.cur/(US()?1.609344:1))+' of '+Math.round(t.free/(US()?1.609344:1))+' '+(US()?'mph':'km/h')+(t.adj>0.05?', road +'+(US()?(t.adj*1.8).toFixed(1):t.adj.toFixed(1))+' '+tU():', no road warming')}
+function trafficCard(){const x=trf(),t=now.traffic;
+  return `<div class="card"><h2>Traffic and road temperature</h2><p class="mute" style="margin-top:0">Slow, heavy traffic can warm the road a little. With a free TomTom key the app checks traffic near you and nudges the road temperature estimate up, which feeds the sealant drying estimate. This is optional and off until you add a key.</p>
+  <label for="tk">TomTom API key</label><input id="tk" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" data-tk="1" value="${esc(x.key||'')}" placeholder="Paste your key">
+  <div class="row" style="margin-top:8px"><div><label for="tn">Use traffic</label><select id="tn" data-tn="1"><option value="1"${x.on?' selected':''}>On</option><option value="0"${!x.on?' selected':''}>Off</option></select></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button data-act="trafficnow"${x.key&&S.home?'':' disabled'}>Check traffic now</button></div>
+  <p class="mute" id="trmsg" aria-live="polite" style="margin:8px 0 0">${t?(t.err?esc(t.err):'Traffic is moving at '+Math.round(t.cur/(US()?1.609344:1))+' of '+Math.round(t.free/(US()?1.609344:1))+' '+(US()?'mph':'km/h')+'. Road temperature adjusted by '+(US()?(t.adj*1.8).toFixed(1):t.adj.toFixed(1))+' '+tU()+'.'):(S.home?'':'Set your location first (Data, above).')}</p>
+  <p class="mute" style="margin:6px 0 0">How it works: the adjustment is 0 when traffic moves at free-flow speed and grows to at most ${(US()?(S.a.trafficMaxC*1.8).toFixed(1):S.a.trafficMaxC)} ${tU()} (Model tab) when it crawls. I found no published figure for how much traffic changes road temperature, so that maximum is a guess to test, not a measurement. The app can only read traffic right now, so earlier rides are not adjusted. Get a free key at developer.tomtom.com. Your key stays on this device and is left out of backups. The app sends your location, rounded to about 100 meters, to TomTom for each check. TomTom's terms apply.</p></div>`}
 function viewData(){
   const nR=S.rides.length,wx=S.rides.filter(r=>r.roadC!=null).length;
   const rows=S.rides.slice().sort((a,b)=>b.startMs-a.startMs).slice(0,8).map(r=>`<tr><td>${fmtD(r.startMs)}</td><td>${r.hours.toFixed(1)} h</td><td>${r.km!=null?dR(r.km)+' '+dU():'–'}</td><td>${r.tempC!=null?Math.round(tF(r.tempC))+' '+tU():'–'}</td><td>${r.roadC!=null?Math.round(tF(r.roadC))+' '+tU():'–'}</td><td>${esc(r.source)}</td></tr>`).join('');
@@ -857,12 +913,76 @@ function viewData(){
   ${srcRow('Garmin direct','no','Garmin only gives live data to approved partner companies. Connect Garmin to Intervals.icu or Strava instead')}
   ${srcRow('Fitbit, Wahoo, RideWithGPS, Komoot, TrainingPeaks','no','Not offered. Fitbit ended its old interface on 30 Sep 2026. The others need partner approval or have no public access')}
   ${srcRow('TyreGuru sensor','no','Planned. Until then you enter gauge readings and sealant checks by hand')}
-  ${srcRow('AI review (Claude)','ok','Used for the review on Home when this page is opened inside Claude')}</div>
+  ${srcRow('AI review (Claude)',aiUrl()?'ok':'no',aiUrl()?'Sent through your AI review service when this page is not inside Claude':'Works inside Claude. For this app by itself, add a service address below')}</div>
+  ${trafficCard()}
+  ${aiServiceCard()}
   <div class="card"><h2>Rides</h2><p class="mute" style="margin-top:0">${nR} rides, newest first (showing up to 8).</p><div class="scroll"><table><thead><tr><th>Date</th><th>Time</th><th>Distance</th><th>Air</th><th>Road est.</th><th>From</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No rides yet.</td></tr>'}</tbody></table></div></div>`;
 }
+/* ---------- punctures: sealant lost, presets, and what each sealant can plug ---------- */
+const HOLE_SRC_CW='https://www.cyclingweekly.com/group-tests/best-tubeless-sealant-448797',HOLE_SRC_ST='https://www.singletracks.com/mtb-gear/best-tubeless-tire-sealant/';
+/* claim = maker's stated largest hole (mm); test = largest hole sealed in a published test (mm). Figures as reported by the two reviews; null means no figure found. */
+const HOLE={"Stan's":{claim:6,test:3,note:'Maker claim about 6 mm (6.5 mm in one table). Sealed 3 mm in two reviews.',src:HOLE_SRC_CW},
+ "Orange Seal":{claim:6,test:3,note:'Maker claim about 6 mm (6.35 mm in one table). Sealed 3 mm in two reviews.',src:HOLE_SRC_CW},
+ "Muc-Off":{claim:6,test:6,note:'Maker claim 6 mm. Sealed 6 mm in one review; at 7 mm it held only about 30 PSI.',src:HOLE_SRC_CW},
+ "Silca":{claim:6,test:7,note:'Maker claim 6 mm at 80 PSI, 8 mm at low pressure. Sealed 7 mm in one review.',src:HOLE_SRC_CW},
+ "Schwalbe":{claim:null,test:null,note:'No maximum hole size found.',src:null},
+ "Bontrager":{claim:null,test:null,note:'No maximum hole size found.',src:null}};
+const HOLE_PRESETS=[1,2,3,4,5,6,7,8];
+const PKIND=[['sealed','Sealed on its own'],['plugged','Plugged (sealant lost, then plugged)'],['flat','Flat, did not seal']];
+/* Sealant lost, in ml, worked out for this tire, this sealant and this hole. No maker or test publishes a loss figure, so this is a calculation, not a measurement:
+   loss = 0.35 x hole(mm)^2 x sqrt(pressure / 40 PSI) x (tire width / 32 mm) x sealing factor x kind factor
+   - hole squared: the opening grows with hole area. sqrt(pressure): flow through a hole rises with the square root of the pressure pushing it.
+   - width: a wider tire holds more air and sealant, and takes longer to seal.
+   - sealing factor = 1 + (hole / reliable hole)^2, where the reliable hole is the largest hole this sealant sealed in a published test (or 3 mm when no test was found). A sealant working near its limit loses more before it seals.
+   - kind factor: 1 for sealed on its own, 1.25 for plugged, 1.6 for a flat. */
+function puncInfo(widthMm,psi,brand,holeMm,kind){const H=HOLE[TG.sealantOf(brand)?TG.sealantFamily(brand):'']||null,hole=Math.max(0.5,Math.min(12,+holeMm||3)),w=Math.max(0.7,Math.min(2.2,(+widthMm||32)/32)),p=Math.max(0.6,Math.min(2,Math.sqrt((+psi||40)/40))),hr=H&&H.test!=null?H.test:3,g=1+Math.pow(hole/hr,2),k=kind==='flat'?1.6:(kind==='plugged'?1.25:1);
+  return {ml:Math.max(1,Math.round(0.35*hole*hole*p*w*g*k)),hr,tested:!!(H&&H.test!=null),g,p,w,k}}
+const puncMl=(t,hole,kind)=>puncInfo(t.widthMm,advice(t).tgt,t.sealant.brand,hole,kind).ml;
+function puncVerdict(brand,holeMm,kind){
+  if(kind==='flat')return {cls:'red',txt:'It did not seal. Plug or boot it, add sealant, and check the pressure.'};
+  const H=HOLE[TG.sealantOf(brand)?TG.sealantFamily(brand):''];
+  if(!brand)return {cls:'grey',txt:'Choose this tire\'s sealant in Settings, Bike to compare the hole size.'};
+  if(!H||H.claim==null)return {cls:'grey',txt:'No maker figure found for this sealant. Plug holes larger than about 3 mm.'};
+  if(holeMm>H.claim)return {cls:'red',txt:`Larger than the ${H.claim} mm this maker states. Plug it.`};
+  if(H.test!=null&&holeMm<=H.test)return {cls:'green',txt:`Within the ${H.claim} mm maker claim and within the ${H.test} mm sealed in a published test. Real sealing still depends on pressure.`};
+  return {cls:'yellow',txt:`Within the ${H.claim} mm maker claim, but larger than the ${H.test} mm sealed in the tests found. It may need a plug.`}}
+function sealChange(t,before,after,what){const lost=Math.round(before-after);
+  if(before<=0.5)return 'Saved, but this tire\'s sealant estimate is already at 0. The sealant applied '+fmtD(t.sealant.dateMs)+(t.sealant.brand?'':' (no brand chosen)')+' is past its expected life, so there is nothing left to subtract from. Log "Sealant added" with today\'s date (Settings, Log) and the new amount will count.';
+  return 'Saved. Sealant estimate was '+vfmt(before)+', now '+vfmt(after)+(lost<1?' (the change is under 1 ml).':'.')}
+let pd={};
+function pdraft(i){return pd[i]=pd[i]||{hole:3,kind:'sealed',ml:null,open:false}}
+function puncCard(i){const t=S.tires[i],nm=t.wheel==='front'?'Front':'Rear',d=pdraft(i),pi=puncInfo(t.widthMm,advice(t).tgt,t.sealant.brand,d.hole,d.kind),pre=pi.ml,ml=d.ml!=null?d.ml:pre,v=puncVerdict(t.sealant.brand,d.hole,d.kind),st=sealantStateFor(t,S.rides,Date.now());
+  const inch=h=>({1:'1/32',2:'1/16',3:'1/8',4:'5/32',5:'3/16',6:'1/4',7:'9/32',8:'5/16'})[h];
+  return `<div class="card"><h3 style="margin-top:0">${nm} tire</h3>
+  <p class="mute" style="margin:0 0 6px">${esc((t.brand+' '+(t.model||'')).trim()||'Tire not set')} · ${t.widthMm||'?'} mm · sealant: ${esc(t.sealant.brand||'not set')}</p>
+  <label>Puncture size, mm</label><div style="display:flex;gap:6px;flex-wrap:wrap" role="group" aria-label="${nm} puncture size">${HOLE_PRESETS.map(h=>`<button class="${d.hole===h?'':'ghost'}" data-ph="${i}:${h}" aria-pressed="${d.hole===h}" style="min-width:44px">${h}</button>`).join('')}</div>
+  <p class="mute" style="margin:4px 0 8px">${d.hole} mm is about ${inch(d.hole)} inch. Fine thorn about 1 to 2 mm, wire or glass 2 to 4 mm, cut or gash 5 mm and up.</p>
+  <div class="row"><div><label for="pk${i}">What happened</label><select id="pk${i}" data-pk="${i}">${PKIND.map(k=>`<option value="${k[0]}"${d.kind===k[0]?' selected':''}>${k[1]}</option>`).join('')}</select></div>
+  <div><label for="pm${i}">Sealant lost, ${vU()}</label><input id="pm${i}" type="number" inputmode="decimal" step="0.1" data-pml="${i}" value="${vR(ml)}"></div></div>
+  <p class="mute" style="margin:4px 0">Preset for this tire, sealant and hole: <b>${vR(pre)} ${vU()}</b>. Worked out from the ${t.widthMm||'?'} mm width, about ${Math.round(advice(t).tgt)} PSI, and ${pi.tested?'the '+pi.hr+' mm this sealant sealed in a published test':'a 3 mm reliable hole, because no test was found for '+esc(t.sealant.brand||'this sealant')}. Type your own number if you measured it.</p>
+  <p style="margin:6px 0"><span class="tag ${v.cls}">${v.cls==='green'?'LIKELY TO SEAL':v.cls==='red'?'PLUG IT':v.cls==='yellow'?'MAYBE':'NO DATA'}</span> ${esc(v.txt)}</p>
+  <button data-act="puncsave" data-i="${i}">Save ${nm.toLowerCase()} puncture</button>
+  <p class="mute" id="pmsg${i}" aria-live="polite" style="margin:6px 0 0">${esc(msg['p'+i]||'')}</p>
+  <p class="mute" style="margin:6px 0 0">Sealant now: <b>${vfmt(st.leftMl)}</b> of ${vfmt(st.doseMl)}. ${st.eventCount?`Punctures since the last refill have used ${vfmt(st.eventMl)} (${st.eventCount}).`:'No punctures logged since the last refill.'}</p></div>`}
+function viewPunct(){
+  const rows=Object.keys(HOLE).map(k=>{const H=HOLE[k];return `<tr><td>${esc(k)}</td><td>${H.claim!=null?H.claim+' mm':'no figure'}</td><td>${H.test!=null?H.test+' mm':'no figure'}</td><td>${S.tires.map(t=>vR(puncInfo(t.widthMm,advice(t).tgt,k,pdraft(0).hole,'sealed').ml)+' '+vU()).join(' / ')}</td><td>${H.src?`<a href="${H.src}" target="_blank" rel="noopener">source</a>`:'–'}</td></tr>`}).join('');
+  const hist=[];S.tires.forEach(t=>(t.sealant.events||[]).forEach(e=>hist.push([e.dateMs,t.wheel,e])));hist.sort((a,b)=>b[0]-a[0]);
+  return `<h2>Punctures and sealant loss</h2><p class="mute" style="margin-top:0">Enter each puncture or flat for the front and rear tire. The sealant lost comes straight off that tire's sealant estimate, and the dial and Trends update.</p>
+  ${S.tires.map((t,i)=>puncCard(i)).join('')}
+  <div class="card"><h3 style="margin-top:0">How big a hole each sealant can plug</h3><div class="scroll"><table><thead><tr><th>Sealant</th><th>Maker claim</th><th>Largest sealed in a test</th><th>Est. loss, ${pdraft(0).hole} mm hole ${S.tires.map(t=>t.wheel==='front'?'front':'rear').join(' / ')}</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="mute">Maker claims and test results as reported by Cycling Weekly and Singletracks, not measured by this app. Most tests used pressures and holes of their own, so treat them as a guide. Holes in the sidewall cannot be sealed safely: boot the tire and replace it.</p></div>
+  <div class="card"><h3 style="margin-top:0">About the preset amounts</h3><p class="mute" style="margin:0 0 6px">No sealant maker or test publishes how much sealant a puncture uses, so the preset is calculated for your tire, sealant and hole:</p><p style="margin:0 0 6px"><b>loss = 0.35 × hole² × √(pressure ÷ 40 PSI) × (tire width ÷ 32 mm) × sealing factor × kind factor</b></p><p class="mute" style="margin:0 0 6px">The hole counts squared because the opening grows with area. Pressure counts as a square root because flow through a hole rises that way. A wider tire holds more and takes longer to seal. The sealing factor is 1 + (hole ÷ reliable hole)², where the reliable hole is the largest this sealant sealed in a published test, or 3 mm when no test was found, so a sealant near its limit loses more before it seals. The kind factor is 1 when it sealed by itself, 1.25 when you plugged it and 1.6 for a flat. The constant 0.35 is a first guess. Replace the preset with your own number when you know it, and the app uses what you enter.</p></div>
+  ${hist.length?`<div class="card"><h3 style="margin-top:0">Logged punctures</h3><div class="scroll"><table><thead><tr><th>Date</th><th>Tire</th><th>Hole</th><th>What</th><th>Lost</th></tr></thead><tbody>${hist.slice(0,15).map(h=>`<tr><td>${fmtD(h[0])}</td><td>${h[1]}</td><td>${h[2].holeMm?h[2].holeMm+' mm':'–'}</td><td>${({sealed:'sealed',plugged:'plugged',flat:'flat'})[h[2].kind]||'sealed'}</td><td>${vfmt(h[2].ml||S.a.mlPerSealEvent)}</td></tr>`).join('')}</tbody></table></div></div>`:''}`}
+function adjustCard(i){const t=S.tires[i],nm=t.wheel==='front'?'Front':'Rear',x=tireStatus(t);
+  return `<div class="card"><h3 style="margin-top:0">${nm} tire: take air or sealant out</h3><p class="mute" style="margin:0 0 6px">Let air out or draw sealant off and the estimates drop by that amount right away. To add air or sealant, use the entries above.</p>
+  <div class="row"><div><label for="ao${i}">Air let out, PSI</label><input id="ao${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" placeholder="e.g. 5"></div><div style="align-self:end"><button data-act="airout" data-i="${i}">Subtract air</button></div></div>
+  <p class="mute" style="margin:4px 0 8px">${x.ar.known?'Estimated now: '+(Math.round(x.ar.estPsi*10)/10)+' PSI.':'Log a fill or a gauge reading first so the app has a starting pressure.'}</p>
+  <div class="row"><div><label for="so${i}">Sealant removed, ${vU()}</label><input id="so${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" placeholder="e.g. ${US()?0.5:15}"></div><div style="align-self:end"><button data-act="sealout" data-i="${i}">Subtract sealant</button></div></div>
+  <p class="mute" style="margin:4px 0 0">Sealant now: ${vfmt(x.sl.leftMl)}.</p>
+  <p class="mute" id="adj${i}" aria-live="polite" style="margin:6px 0 0">${esc(msg['a'+i]||'')}</p></div>`}
 function viewLog(){
   const opts=S.tires.map((t,i)=>`<option value="${i}">${t.wheel==='front'?'Front':'Rear'}</option>`).join('');
-  const hist=[];S.tires.forEach(t=>{t.fills.forEach(f=>hist.push([f.dateMs,t.wheel,`Air ${f.beforePsi!=null?f.beforePsi+' → ':''}${f.afterPsi} PSI`]));t.checks.forEach(c=>hist.push([c.dateMs,t.wheel,`Sealant check: ${c.level}`]));t.sealant.events.forEach(e=>hist.push([e.dateMs,t.wheel,'Puncture sealed']));});
+  const hist=[];S.tires.forEach(t=>{t.fills.forEach(f=>hist.push([f.dateMs,t.wheel,`Air ${f.beforePsi!=null?(Math.round(f.beforePsi*10)/10)+' → ':''}${Math.round(f.afterPsi*10)/10} PSI${f.beforePsi!=null&&f.afterPsi<f.beforePsi-0.05?' (air let out)':''}`]));t.checks.forEach(c=>hist.push([c.dateMs,t.wheel,`Sealant check: ${c.level}`]));t.sealant.events.forEach(e=>hist.push([e.dateMs,t.wheel,e.kind==='removed'?'Sealant removed, '+vfmt(e.ml):'Puncture'+(e.holeMm?' '+e.holeMm+' mm':'')+(e.kind==='flat'?' (flat)':e.kind==='plugged'?' (plugged)':' sealed')+', '+vfmt(e.ml||S.a.mlPerSealEvent)+' sealant lost']));});
   hist.sort((a,b)=>b[0]-a[0]);
   const ests=S.tires.map(t=>{const A=advice(t);return {wheel:t.wheel,psi:A.air.known?Math.round(A.air.estPsi):null,tgt:A.tgt,fill:A.air.fillTo,needAir:A.air.needAir,ml:A.sealant.leftMl,needSeal:A.sealant.needAdd,add:A.sealant.addMl}});
   window.__est=ests;
@@ -879,9 +999,10 @@ function viewLog(){
   <h3>Air</h3><div class="row"><div><label for="lb">Gauge reading before, PSI</label><input id="lb" type="number" inputmode="decimal" step="0.1" autocomplete="off" value="" placeholder="e.g. 42.6"></div><div><label for="la">PSI after filling</label><input id="la" type="number" inputmode="decimal" step="0.1" autocomplete="off" placeholder="${ests[0]?'target '+ests[0].tgt+', blank if no air added':''}"></div><div><label for="lc">Air temperature, ${tU()}</label><input id="lc" type="number" value="${Math.round(tF(now.airC!=null?now.airC:20))}"></div></div>
   <button data-act="logair" style="margin-top:8px">Save air entry</button>
   <h3>Sealant</h3><div class="row"><div><label for="ll">What you saw or felt</label><select id="ll"><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div></div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button data-act="logcheck">Save sealant check</button><button class="ghost" data-act="logpunc">Log a puncture that sealed</button></div>
-  <div class="row" style="margin-top:8px"><div><label for="am">Sealant added, ${vU()}</label><input id="am" type="number" step="0.1" placeholder="e.g. ${US()?1:30}"></div><div><label for="ab">Brand added</label><select id="ab"><option value="">Choose a brand</option>${TG.BRANDS.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div style="align-self:end"><button data-act="logadd">Save sealant added</button></div></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button data-act="logcheck">Save sealant check</button><button class="ghost" data-goto="settings:punct">Log a puncture or flat</button></div>
+  <div class="row" style="margin-top:8px"><div><label for="am">Sealant added, ${vU()}</label><input id="am" type="number" step="0.1" placeholder="e.g. ${US()?1:30}"></div><div><label for="ab">Brand added</label><input id="ab" list="dl-sealant" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="Type to search, or add your own"></div><div style="align-self:end"><button data-act="logadd">Save sealant added</button></div></div>
   <p class="mute" id="gmsg" aria-live="polite">${esc(msg.log||'')}</p></div>
+  ${S.tires.map((t,i)=>adjustCard(i)).join('')}
   <div class="card"><h2>History</h2>${hist.length?`<div class="scroll"><table><tbody>${hist.slice(0,15).map(h=>`<tr><td>${fmtD(h[0])}</td><td>${h[1]}</td><td>${esc(h[2])}</td></tr>`).join('')}</tbody></table></div>`:'<p class="mute">Nothing logged yet.</p>'}</div>`;
 }
 const VARS=[
@@ -908,22 +1029,22 @@ function viewModel(){
   const a=S.a;const f=(k,l,st)=>{const mi=k==='dayPerKm'&&US();return `<div><label for="a_${k}">${l}</label><input id="a_${k}" type="number" step="${st}" data-a="${k}" ${mi?'data-conv="mi" ':''}value="${mi?+(a[k]*1.609344).toFixed(4):a[k]}"></div>`};
   const hist=S.rides.filter(r=>r.tempC!=null);const avgC=hist.length?hist.reduce((s,r)=>s+r.tempC,0)/hist.length:null;
   const km=S.rides.reduce((s,r)=>s+(r.km||0),0),span=S.rides.length?(Math.max(...S.rides.map(r=>r.startMs))-Math.min(...S.rides.map(r=>r.startMs)))/DAY/30+1:1;
-  const bm=ENV.brandMatch({avgC,kmPerMonth:km/span,terrain:S.rider.terrain,punctures:S.tires.reduce((s,t)=>s+t.sealant.events.length,0),sizeMm:S.tires[0].widthMm,a});
+  const bm=ENV.brandMatch({avgC,kmPerMonth:km/span,terrain:S.rider.terrain,punctures:S.tires.reduce((s,t)=>s+t.sealant.events.filter(e=>e.kind!=='removed').length,0),sizeMm:S.tires[0].widthMm,a});
   const mine=S.tires.map(t=>`<p style="margin:4px 0"><b>${t.wheel==='front'?'Front':'Rear'}:</b> ${esc(t.sealant.brand||'brand not set, choose it in Settings')}${t.sealant.brand?`, ${vfmt(t.sealant.ml)}, applied ${fmtD(t.sealant.dateMs)}`:''}</p>`).join('');
   const used=S.tires.map(t=>t.sealant.brand).filter(Boolean);
   const fits=bm.filter(b=>used.some(u=>TG.sealantFamily(u)===TG.sealantFamily(b[0]))),others=bm.filter(b=>!used.some(u=>TG.sealantFamily(u)===TG.sealantFamily(b[0])));
   const note=!used.length?'Choose your sealant brand in Settings so this page can compare it with your riding.':(!bm.length?'No strong signal in your riding data. Keep your current sealant until a check shows a problem.':'');
   return `<div class="card"><h2>Your sealant</h2><p class="mute" style="margin-top:0">Taken from what you entered in Settings.</p>${mine}${fits.map(b=>`<p style="margin:6px 0 0"><b>${esc(b[0])} fits your riding.</b><br><span class="mute">${esc(b[1])}</span></p>`).join('')}${others.length&&used.length?`<p class="mute" style="margin:8px 0 2px">Other sealants that suit your riding data:</p>`:''}${(used.length?others:bm).map(b=>`<p style="margin:4px 0"><b>${esc(b[0])}</b><br><span class="mute">${esc(b[1])}</span></p>`).join('')}${note?`<p class="mute">${note}</p>`:''}<p class="mute">Rule of thumb from your climate, mileage and punctures. Not tested. Not a recommendation from any manufacturer.</p></div>
   <div class="card"><h2>Assumptions</h2><p class="mute" style="margin-top:0">These starting values are placeholders that have not been tested on real tires. Change them and watch the advice move. Your sealant checks adjust the life estimate automatically.</p><div class="row">
-  ${f('refLifeDays',US()?'Sealant life at 68 °F, days':'Sealant life at 20 °C, days',5)}${f('q10',US()?'Drying speed multiplier per +18 °F':'Drying speed multiplier per +10 °C',0.1)}${f('triggerFraction','Add sealant below this share of a full dose',0.05)}${f('leakPctPerDay','Air loss, % per day (starting guess)',0.1)}${f('dayPerKm',US()?'Sealant wear, days per mile':'Sealant wear, days per km',0.005)}${f('roadK','Road heating factor',0.05)}</div>
+  ${f('trafficMaxC','Most a traffic jam adds to road temperature, °C',0.1)}${f('refLifeDays',US()?'Sealant life at 68 °F, days':'Sealant life at 20 °C, days',5)}${f('q10',US()?'Drying speed multiplier per +18 °F':'Drying speed multiplier per +10 °C',0.1)}${f('triggerFraction','Add sealant below this share of a full dose',0.05)}${f('leakPctPerDay','Air loss, % per day (starting guess)',0.1)}${f('dayPerKm',US()?'Sealant wear, days per mile':'Sealant wear, days per km',0.005)}${f('roadK','Road heating factor',0.05)}</div>
   <button class="ghost" data-act="defaults" style="margin-top:8px">Reset assumptions</button></div>
   <div class="card"><h2>Where each input comes from</h2><div class="scroll"><table><thead><tr><th>Input</th><th>Source</th><th>Feeds</th><th>Status</th></tr></thead><tbody>${VARS.map(v=>`<tr>${v.map(x=>`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
-  <div class="card"><h2>Backup</h2><p class="mute" style="margin-top:0">Copy this text to keep your data. Paste it back later to restore.</p><textarea id="bk" rows="4" spellcheck="false">${esc(JSON.stringify(S))}</textarea><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button data-act="copy">Copy</button><button class="ghost" data-act="restore">Restore from text</button><button class="warn" data-act="wipe">Erase everything</button></div><p class="mute" id="kmsg" aria-live="polite">${esc(msg.bk||'')}</p></div>`;
+  ${dataCard()}<div class="card"><h2>Backup</h2><p class="mute" style="margin-top:0">Copy this text to keep your data. Paste it back later to restore. It leaves out sign-in keys and anything read from Strava, Apple Health, Intervals.icu, Withings or WHOOP; those come back when you reconnect.</p><textarea id="bk" rows="4" spellcheck="false">${esc(JSON.stringify(cleanCopy()))}</textarea><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button data-act="copy">Copy</button><button class="ghost" data-act="restore">Restore from text</button><button class="warn" data-act="wipe">Erase everything</button></div><p class="mute" id="kmsg" aria-live="polite">${esc(msg.bk||'')}</p></div>`;
 }
 
 /* ---------- screens that follow the proposal wireframes (S1 Set up, S2 Home, S4 Tire detail, S5 Trends) ---------- */
 let detail=null, stab='bike', trI=0, editTire=null;
-const STABS=[['bike','Bike'],['data','Data'],['log','Log'],['model','Model']];
+const STABS=[['bike','Bike'],['data','Data'],['log','Log'],['punct','Punctures'],['model','Model']];
 function segBar(items,cur,attr){return `<div class="seg" role="tablist">${items.map(([v,l])=>`<button ${attr}="${v}" aria-current="${String(v)===String(cur)}">${l}</button>`).join('')}</div>`}
 function bikeName(){return (S.rider&&S.rider.bikeName)||'My bike'}
 function bikeBar(){return `<div class="bikesel" data-goto="settings:bike" role="button" tabindex="0" aria-label="Bike: ${esc(bikeName())}. Tap to change"><span>${esc(bikeName())}</span><span aria-hidden="true">▾</span></div><p class="mute" style="margin:6px 0 2px">Estimated just now · ${S.rides.length} ride${S.rides.length===1?'':'s'} on file</p>`}
@@ -942,6 +1063,63 @@ function levelWord(x){
   const K={Low:'l',OK:'o',Good:'g',High:'h',Overfilled:'l'};return {seal,air,sealKey:K[seal],airKey:K[air],sealTxt:`${seal} - ${vR(x.sl.leftMl)} ${vU()}`,airTxt:x.ar.known?`${air} - ${Math.round(x.ar.estPsi*10)/10} PSI`:'No log yet'};
 }
 function sbox(l,v,red){return `<div class="sbox ${red?'red':''}"><small>${l}</small><b>${v}</b></div>`}
+
+/* ---------- alerts: danger alarm, optimal chirp, sealant-check reminders, quiet controls ---------- */
+function AL(){if(!S.alerts)S.alerts={};const a=S.alerts;if(a.mode===undefined)a.mode='both';if(a.danger===undefined)a.danger=true;if(a.chirp===undefined)a.chirp=true;if(a.remind===undefined)a.remind=true;if(a.open===undefined)a.open=true;if(a.cue===undefined)a.cue='auto';if(!a.ack)a.ack={};return a}
+function cuesOn(){const a=AL();return a.cue==='on'||(a.cue!=='off'&&!!(S.rider&&S.rider.cb))}
+function alNat(){try{return window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.alerts||null}catch(e){return null}}
+let alCtx=null,alSeen={},alBase=false,alOkMs=0,alRem='',alOpened=false,alHiddenAt=0,alOpenTm=[];
+function alUnlock(){try{if(!alCtx){const C=window.AudioContext||window.webkitAudioContext;if(C)alCtx=new C()}if(alCtx&&alCtx.state==='suspended')alCtx.resume()}catch(e){}}
+function alTone(notes){if(!alCtx)return;const t0=alCtx.currentTime+.02;notes.forEach(([f,s0,d])=>{const o=alCtx.createOscillator(),g=alCtx.createGain();o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0,t0+s0);g.gain.linearRampToValueAtTime(.35,t0+s0+.01);g.gain.linearRampToValueAtTime(0,t0+s0+d);o.connect(g);g.connect(alCtx.destination);o.start(t0+s0);o.stop(t0+s0+d+.02)})}
+/* kind: 'danger' (three beeps, 880 Hz) or 'chirp' (one short 2093 Hz tone). mode: both | vibrate | off */
+function alFire(kind,force){const A0=AL(),m=A0.mode;if(m==='off')return;if(A0.where==='garmin'&&!force)return;const sound=m==='both',vib=m==='both'||m==='vibrate',h=alNat();
+  if(h){try{h.postMessage({cmd:'alert',kind,sound,vib});return}catch(e){}}
+  if(sound)alTone(kind==='chirp'?[[2093,0,.16]]:[[880,0,.14],[880,.22,.14],[880,.44,.14]]);
+  if(vib){try{navigator.vibrate&&navigator.vibrate(kind==='chirp'?[40]:[200,100,200,100,200])}catch(e){}}}
+/* A tire is in danger when its dial reads red: air over the maximum or hookless limit, air more than 20% below target, or sealant under 40% of a full dose. */
+function alDanger(){const out=[];S.tires.forEach(t=>{const x=tireStatus(t),nm=t.wheel==='front'?'Front':'Rear';
+  if(x.ar.known){if(x.overfilled)out.push({id:t.wheel+':airhigh',msg:`${nm} tire is over its maximum pressure. Let air out until the gauge reads ${Math.round(x.ar.tgt*10)/10} PSI.`});else if(x.ar.estPsi<x.Z.low)out.push({id:t.wheel+':airlow',msg:`${nm} tire air is more than 20% below target. Add air to ${x.ar.fillTo} PSI.`})}
+  if(x.sealRed)out.push({id:t.wheel+':seal',msg:`${nm} tire sealant is under 40% of a full dose. Add ${vfmt(x.sl.addMl)} of sealant.`})});return out}
+/* When the app opens, each tire gets its own sound in turn: front first, then rear. A chirp means no dial is red (green or yellow); the alarm means a dial reads red. */
+function alOpenPlan(){const d=alDanger();return S.tires.map(t=>{const x=tireStatus(t),nm=t.wheel==='front'?'Front':'Rear';let kind=null,why='';
+    if(d.some(q=>q.id.indexOf(t.wheel+':')===0)){kind='danger';why='a dial is red'}
+    else if(!x.ar.known)why='no air logged yet';
+    else{kind='chirp';const L=levelWord(x);why=(L.airKey==='g'&&L.sealKey==='g')?'both dials green':'no red dial, only yellow'}
+    return {nm,kind,why}})}
+function alOpenCheck(){const a=AL();alOpened=true;alOpenTm.forEach(clearTimeout);alOpenTm=[];if(!a.open)return;
+  alOpenPlan().forEach((q,i)=>{if(q.kind)alOpenTm.push(setTimeout(()=>alFire(q.kind),i*1100))})}
+function alOptimal(){return S.tires.length>0&&S.tires.every(t=>{const x=tireStatus(t),L=levelWord(x);return x.ar.known&&L.airKey==='g'&&L.sealKey==='g'})}
+function alBase0(t){const c=(t.checks||[]).reduce((m,q)=>Math.max(m,q.dateMs||0),0);return Math.max(t.sealant.dateMs||0,c)}
+function alNextCheck(t){const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type),m=d&&d.chk?/\d+(\.\d+)?/.exec(d.chk):null,b=alBase0(t);return m&&b?b+parseFloat(m[0])*30.4*DAY:null}
+function alDue(){return S.tires.filter(t=>{const n=alNextCheck(t);return n&&n<=Date.now()})}
+function alRemItems(){const g={};S.tires.forEach(t=>{const n=alNextCheck(t);if(!n)return;const d=new Date(n);d.setHours(9,0,0,0);const at=d.getTime();if(at<=Date.now()+60000)return;const k=at+'|'+(t.sealant.brand||'');(g[k]=g[k]||{at,brand:t.sealant.brand,base:alBase0(t),ws:[]}).ws.push(t.wheel==='front'?'Front':'Rear')});
+  return Object.keys(g).map(k=>{const q=g[k];return {id:'tg-check-'+q.at+'-'+q.ws.join(''),title:'TyreGuru: time to check your sealant',body:`${q.ws.join(' and ')} tire${q.ws.length>1?'s':''}: look at your ${q.brand||'sealant'} (last done ${fmtD(q.base)}), then log what you find in TyreGuru.`,at:q.at}})}
+function alSchedule(force){const h=alNat();if(!h)return;const a=AL(),items=a.remind?alRemItems():[],sig=JSON.stringify(items);if(!force&&sig===alRem)return;alRem=sig;try{h.postMessage({cmd:'remind',items})}catch(e){}}
+function alStop(){}
+function alPending(){const a=AL();return a.danger?alDanger().filter(q=>!a.ack[q.id]):[]}
+function checkAlerts(){const a=AL(),d=alDanger(),ids=d.map(q=>q.id);let dirty=false;
+  Object.keys(a.ack).forEach(k=>{if(!ids.includes(k)){delete a.ack[k];dirty=true}});
+  const pend=a.danger?d.filter(q=>!a.ack[q.id]):[];
+  /* The alarm sounds once for each new problem and never repeats. The red banner stays until the problem is fixed or acknowledged. */
+  const fresh=a.danger?d.filter(q=>!alSeen[q.id]):[];
+  Object.keys(alSeen).forEach(k=>{if(!ids.includes(k))delete alSeen[k]});ids.forEach(k=>{alSeen[k]=true});
+  if(fresh.length&&(alOpened||!a.open))alFire('danger');
+  const opt=alOptimal(),chirp=alBase&&opt&&!a.wasOpt&&a.chirp&&!pend.length;
+  if(a.wasOpt!==opt){a.wasOpt=opt;dirty=true}alBase=true;if(dirty)save();alSchedule(false);
+  if(chirp){alFire('chirp');alOkMs=Date.now();if(tab==='home'&&detail===null)render(true);setTimeout(()=>{if(tab==='home'&&detail===null)render(true)},8200)}}
+function alertBanner(){const a=AL(),p=alPending(),strong=cuesOn();let h='';
+  if(p.length)h+=`<div class="card big red" role="alert" aria-live="assertive" style="${strong?'border-width:4px;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.14) 0 8px,transparent 8px 16px)':''}"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0;${strong?'font-size:1.5em':''}">✕ DANGER</h2><span class="tag red">✕ ALARM</span></div>${p.map(q=>`<p style="margin:8px 0;${strong?'font-size:1.15em':''}"><b>✕ ${esc(q.msg)}</b></p>`).join('')}<button data-act="alack" style="width:100%">Acknowledge</button><p class="mute" style="margin:6px 0 0">The alarm sounds once. This warning stays until you tap Acknowledge or fix the problem.</p></div>`;
+  if(Date.now()-alOkMs<8000&&!p.length)h+=`<div class="card big green" role="status"><b>✓ Both tires are in the green. Good to ride.</b></div>`;
+  const due=alDue();if(due.length&&a.remind)h+=`<div class="card" role="status" style="border:2px solid var(--yel,#e6a817)"><b>Sealant check due</b><p class="mute" style="margin:4px 0 0">${due.map(t=>t.wheel==='front'?'Front':'Rear').join(' and ')} tire${due.length>1?'s':''}: your ${esc(due[0].sealant.brand||'sealant')} maker suggests a check about now. Look and feel, then log what you find in Settings, Log.</p></div>`;
+  return h}
+function alertsCard(){const a=AL(),o=(v,cur,l)=>`<option value="${v}"${String(cur)===String(v)?' selected':''}>${l}</option>`,onoff=k=>o('1',a[k]?'1':'0','On')+o('0',a[k]?'1':'0','Off');
+  return `<div class="card"><h3 style="margin-top:0">Alerts</h3><p class="mute" style="margin-top:0">Alerts work while TyreGuru is open, from your last readings and the sealant's age. They are not live readings from the tires.</p><div class="row"><div><label for="alm">Sound and vibration</label><select id="alm" data-alv="mode">${o('both',a.mode,'Sound + vibration')}${o('vibrate',a.mode,'Vibration only')}${o('off',a.mode,'Silent (on-screen only)')}</select></div><div><label for="ald">Danger alarm</label><select id="ald" data-alv="danger">${onoff('danger')}</select></div></div>
+  <div class="row"><div><label for="alc">Chirp when both tires are optimal</label><select id="alc" data-alv="chirp">${onoff('chirp')}</select></div><div><label for="alr">Sealant check reminders</label><select id="alr" data-alv="remind">${onoff('remind')}</select></div></div>
+  <div class="row"><div><label for="alo">Check sound when the app opens (one per tire)</label><select id="alo" data-alv="open">${onoff('open')}</select></div></div>
+  <div class="row"><div><label for="alw">Where alerts sound</label><select id="alw" data-alv="where">${o('phone',a.where||'phone','Phone')}${o('garmin',a.where||'phone','Bike computer (mutes phone sound and vibration)')}${o('both',a.where||'phone','Both')}</select></div></div>
+  <div class="row"><div><label for="alq">Strong visual cues (for the color-blind palette)</label><select id="alq" data-alv="cue">${o('auto',a.cue,'Auto (on with color-blind safe colors)')}${o('on',a.cue,'On')}${o('off',a.cue,'Off')}</select></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="ghost" data-act="altest" data-k="danger">Test danger alarm</button><button class="ghost" data-act="altest" data-k="chirp">Test chirp</button><button class="ghost" data-act="alopen">Test open check</button></div><p class="mute" id="alopm" aria-live="polite" style="margin:6px 0 0">${esc(msg.alopen||'')}</p>
+  <p class="mute" style="margin:8px 0 0">The danger alarm fires when a dial reads red: air more than 20% below target or above the tire or hookless maximum, or sealant under 40% of a full dose. It sounds once for each new problem and does not repeat; the red warning stays on screen until you tap Acknowledge or fix it. The chirp plays once when both tires move into green. When the app opens, each tire gets its own sound in turn, front then rear: a chirp if no dial is red (green or yellow) and the alarm if a dial reads red. Reminders arrive as phone notices at the sealant maker's check interval (${esc((S.tires[0]&&TG.doseInfo(S.tires[0].widthMm,S.tires[0].sealant.brand,S.tires[0].type).chk)||'for example 2 to 7')} months for your sealant), and the phone asks permission the first time. Strong cues add bold borders, a larger ✕ and words so nothing depends on color. If you ride with the TyreGuru Garmin data field, choose Bike computer so only the Edge sounds. The phone then stays quiet and still shows the red warning on screen.</p></div>`}
 
 function gaugeSvg(o){
   // Black face, wide colored band carrying the numbers, a second scale in the other unit inside, raised chrome bezel.
@@ -994,7 +1172,7 @@ function sumCard(t){
 function bmList(){
   const hist=S.rides.filter(r=>r.tempC!=null),avgC=hist.length?hist.reduce((a,r)=>a+r.tempC,0)/hist.length:null;
   const km=S.rides.reduce((a,r)=>a+(r.km||0),0),span=S.rides.length?(Math.max(...S.rides.map(r=>r.startMs))-Math.min(...S.rides.map(r=>r.startMs)))/DAY/30+1:1;
-  return ENV.brandMatch({avgC,kmPerMonth:km/span,terrain:S.rider.terrain,punctures:S.tires.reduce((a,t)=>a+t.sealant.events.length,0),sizeMm:S.tires[0].widthMm,a:S.a});
+  return ENV.brandMatch({avgC,kmPerMonth:km/span,terrain:S.rider.terrain,punctures:S.tires.reduce((a,t)=>a+t.sealant.events.filter(e=>e.kind!=='removed').length,0),sizeMm:S.tires[0].widthMm,a:S.a});
 }
 function accuracyCard(t){
   const f=(t.fills||[]).slice().sort((x,y)=>x.dateMs-y.dateMs),errs=[];
@@ -1019,11 +1197,37 @@ function viewDetail(i){
   <p class="mute">Why: ${why}</p>
   ${accuracyCard(t)}
   <div class="card"><h3 style="margin-top:0">Enter measured pressure</h3><p class="mute" style="margin-top:0">Checked this tire with a gauge? Enter the reading and the estimate resets to it.</p><div class="row"><div><label for="gp">Gauge reading, PSI</label><input id="gp" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" value="" placeholder="Type your reading, e.g. 42.6"></div></div><button data-act="gauge" data-i="${i}" style="width:100%">Save reading</button><p class="mute" id="gpm" aria-live="polite">${esc(msg.gauge||'')}</p></div>
+  ${adjustCard(i)}
   <p style="margin:8px 0;padding:6px 10px;border:2px solid var(--red);border-radius:6px;background:var(--card)"><b>Never inflate above ${maxTxt}.</b> Also check the maximum printed on your rim. Stop and let air out if the gauge goes over.</p>
   <details class="card"><summary>Why this advice</summary><p class="mute">The red and green decisions come from the calculation. The numbers, ranges and assumptions behind them:</p>${card(t)}</details>
-  <h3>Sealant: ${sl.needAdd?'low':'good'}</h3>${bar(sl.frac,sl.needAdd)}<p class="mute">${vR(sl.leftMl)} ${vU()} estimated of ${vR(sl.doseMl)} ${vU()}</p>
+  <h3>Sealant: ${sl.needAdd?'low':'good'}</h3>${bar(sl.levelFrac,sl.needAdd)}<p class="mute">${vR(sl.leftMl)} ${vU()} estimated of ${vR(sl.doseMl)} ${vU()}</p>
   ${pick?`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Sealant match</h3><span class="tag grey">Suggestion</span></div><p style="margin:8px 0 2px"><b>${esc(pick[0])}</b></p><p class="mute" style="margin:0">${esc(pick[1])}</p><p class="mute">Based on your riding. Not a paid placement.</p></div>`:''}
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button data-goto="settings:log">Log air or sealant</button><button class="ghost" data-goto="trends">See trends</button></div>`;
+}
+function airTrendCard(t){
+  const f=(t.fills||[]).slice().sort((a,b)=>a.dateMs-b.dateMs);
+  if(!f.length)return `<div class="card"><h3 style="margin-top:0">Air pressure</h3><p class="mute" style="margin:0">No air is logged for this tire yet. Log a fill or a gauge reading in Settings, Log, and the pressure curve appears here.</p></div>`;
+  const A=advice(t),Z=airZones(A),nowMs=Date.now(),t0=Math.max(f[0].dateMs,nowMs-90*DAY),span=Math.max(DAY,nowMs-t0),N=60;
+  const at=ms=>{const prior=f.filter(c=>c.dateMs<=ms);if(!prior.length)return null;const st=TG.airState({lastFill:prior[prior.length-1],fills:prior.slice(0,-1),targetPsi:A.tgt,nowMs:ms,nowC:null,nowAltM:null,a:S.a});return st.known?st.estPsi:null};
+  const lk=TG.learnedLeakPct(f,S.a),lastF=f[f.length-1],cur=at(nowMs);
+  const proj=Math.max(2*DAY,Math.min(14*DAY,span*0.25)),T1=nowMs+proj;
+  const pts=[];for(let k=0;k<=N;k++){const ms=t0+(nowMs-t0)*k/N,v=at(ms);if(v!=null)pts.push([ms,v])}
+  const pr=[];if(cur!=null){const lastP=f[f.length-1];for(let k=0;k<=12;k++){const ms=nowMs+proj*k/12,d=(ms-nowMs)/DAY;pr.push([ms,cur*Math.pow(1-lk.pct/100,d)])}}
+  const vals=pts.map(q=>q[1]).concat(pr.map(q=>q[1]),[Z.low,Z.tgt,Z.over]),hi=Math.max(...vals)*1.06,lo=Math.max(0,Math.min(...vals)*0.9);
+  const W=320,H=190,L=38,R=8,T=10,B=24,X=ms=>L+(W-L-R)*(ms-t0)/(T1-t0),Y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo||1));
+  const ln=a=>a.map((q,k)=>`${k?'L':'M'}${X(q[0]).toFixed(1)},${Y(q[1]).toFixed(1)}`).join(' ');
+  const band=`<rect x="${L}" y="${Y(Z.good1).toFixed(1)}" width="${W-L-R}" height="${Math.max(0,Y(Z.good0)-Y(Z.good1)).toFixed(1)}" fill="var(--green,#2a9d4b)" opacity=".18"/>`;
+  const ref=(v,lab,col)=>`<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W-R}" y2="${Y(v).toFixed(1)}" stroke="${col}" stroke-dasharray="4 3"/><text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">${Math.round(v)}</text>`;
+  const dots=f.filter(c=>c.dateMs>=t0).map(c=>`<circle cx="${X(c.dateMs).toFixed(1)}" cy="${Y(c.afterPsi).toFixed(1)}" r="4" fill="var(--ink)"/>`+(c.beforePsi!=null&&c.beforePsi!==c.afterPsi?`<circle cx="${X(c.dateMs).toFixed(1)}" cy="${Y(c.beforePsi).toFixed(1)}" r="3.5" fill="none" stroke="var(--ink)" stroke-width="2"/>`:'')).join('');
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Estimated air pressure over time with target, low and maximum lines" style="display:block">${band}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--line)"/>${ref(Z.tgt,'target','var(--ink)')}${ref(Z.low,'low','var(--red)')}<path d="${ln(pts)}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${pr.length?`<path d="${ln(pr)}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>`:''}${dots}<line x1="${X(nowMs).toFixed(1)}" y1="${T}" x2="${X(nowMs).toFixed(1)}" y2="${H-B}" stroke="var(--mute)" stroke-dasharray="2 3"/><text x="${L}" y="${H-6}" font-size="11" fill="var(--mute)">${fmtD(t0)}</text><text x="${X(nowMs).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--ink)">now</text></svg>`;
+  let eta='';if(cur!=null){if(cur<=Z.low)eta='Already below the low line.';else if(lk.pct>0){const d=Math.log(Z.low/cur)/Math.log(1-lk.pct/100);eta=d<=365?`At this leak rate it reaches the low line in about ${Math.max(1,Math.round(d))} day${Math.round(d)===1?'':'s'}.`:'Leaking slowly. No low-air date in the next year.'}}
+  const pu=v=>(Math.round(v*10)/10)+' PSI';
+  return `<div class="card"><h3 style="margin-top:0">Air pressure</h3>${svg}<p class="mute" style="margin:4px 0 0">Solid line: estimate. Dotted: where it is heading. <b>●</b> fill or gauge reading, <b>○</b> pressure before filling. Green band: good range. Red line: low (20% under target).</p></div>
+  <div class="stat"><span class="mute">Estimate now</span><br><b>${cur!=null?pu(cur):'unknown'}</b></div>
+  <div class="stat"><span class="mute">Target</span><br><b>${pu(A.tgt)}</b></div>
+  <div class="stat"><span class="mute">Last fill or reading</span><br><b>${fmtD(lastF.dateMs)} · ${pu(lastF.afterPsi)}</b></div>
+  <div class="stat"><span class="mute">Leak rate</span><br><b>${lk.pct.toFixed(1)}% a day</b>${lk.n<3?' <span class="mute">(still learning)</span>':''}</div>
+  ${eta?`<div class="stat" style="background:var(--line)"><span class="mute">${eta} Temperature swings change real pressure too, so check with a gauge.</span></div>`:''}`;
 }
 function viewTrends(){
   const t=S.tires[trI]||S.tires[0],nowMs=Date.now(),t0=Math.min(t.sealant.dateMs||nowMs-DAY,nowMs-DAY),N=30,pts=[];
@@ -1036,6 +1240,7 @@ function viewTrends(){
   const km=S.rides.filter(r=>r.startMs>=t.sealant.dateMs).reduce((a,r)=>a+(r.km||0),0);
   const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Sealant left over time, from the last refill to now" style="display:block"><line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--line)"/><text x="${L-4}" y="${T+8}" text-anchor="end" font-size="10" fill="var(--mute)">full</text><text x="${L-4}" y="${H-B}" text-anchor="end" font-size="10" fill="var(--mute)">0</text><path d="${path}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${evs}<path d="M${L},${H-B+3} l-6,10 l12,0 z" fill="var(--ink)"/><text x="${L+10}" y="${H-3}" font-size="11" fill="var(--ink)">Refill</text><text x="${W-R}" y="${H-3}" text-anchor="end" font-size="11" fill="var(--mute)">now</text></svg>`;
   return `<h2>Trends</h2>${segBar(S.tires.map((q,i)=>[i,q.wheel==='front'?'Front':'Rear']),trI,'data-tr')}
+  ${airTrendCard(t)}
   <div class="card"><h3 style="margin-top:0">Sealant left</h3>${svg}${(t.sealant.events||[]).length?'<p class="mute" style="margin:4px 0 0"><span style="color:var(--red)">●</span> a puncture that sealed</p>':''}</div>
   <div class="stat"><span class="mute">Last refill</span><br><b>${fmtD(t.sealant.dateMs)}</b></div>
   <div class="stat"><span class="mute">Since refill</span><br><b>${dR(km)} ${dU()}</b></div>
@@ -1052,14 +1257,14 @@ function viewBike(){
   <div><label for="rk">Rider weight, ${wu()}</label><input id="rk" type="number" step="0.5" data-wk="riderKg" value="${fw(S.rider.riderKg)}"></div>
   <div><label for="bk">Bike + gear, ${wu()}</label><input id="bk" type="number" step="0.5" data-wk="bikeKg" value="${fw(S.rider.bikeKg)}"></div></div>
   <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="ghost" data-act="usew" ${lw?'':'disabled'}>Sync</button><span class="mute">From a scale, Apple Health or Strava, or typed in.${lw?` Latest: ${wfmt(lw.kg)} on ${fmtD(lw.ms)}.`:' No imported weight yet.'}</span></div></div>
-  <div class="card"><h3 style="margin-top:0">Tires</h3>${rows}<p class="mute" style="margin:6px 0 0">Edit a tire for brand, model, widths, rim width, install date, condition and sealant. The maximum pressure fills in from the app's tire list.</p></div>
+  ${alertsCard()}<div class="card"><h3 style="margin-top:0">Tires</h3>${rows}<p class="mute" style="margin:6px 0 0">Edit a tire for brand, model, widths, rim width, install date, condition and sealant. The maximum pressure fills in from the app's tire list.</p></div>
   <div class="card"><h3 style="margin-top:0">Main terrain</h3><div class="row"><div><label for="tr">Road surface (Silca style)</label><select id="tr" data-f="rider.terrain">${Object.entries(TG.TERRAIN).map(([v,o])=>`<option value="${v}" ${S.rider.terrain===v?'selected':''}>${o.label}</option>`).join('')}</select></div>
   <div><label for="sf">Usual surface</label><select id="sf" data-f="rider.surface">${Object.keys(ENV.SURFACE).map(v=>`<option value="${v}" ${S.rider.surface===v?'selected':''}>${({chipseal:'Chip seal'})[v]||v.charAt(0).toUpperCase()+v.slice(1)}</option>`).join('')}</select></div></div></div>
   <details class="card"><summary>Quick start</summary><p class="mute">Fills both tires with the Pirelli P Zero Race TLR 4S, 32 mm, an 80 PSI maximum, and your Silca results (rear 60.5 PSI, front 59 PSI at 135 lb, worn pavement). Your weights and everything else stay as they are.</p><button data-act="pirelli">Use my Pirelli 32 mm</button></details>
   ${hist.length?`<div class="card"><h3 style="margin-top:0">Tire history</h3><div class="scroll"><table><thead><tr><th>Wheel</th><th>Tire</th><th>Width</th><th>Installed</th><th>Removed</th><th>Distance</th></tr></thead><tbody>${hist.map(h=>`<tr><td>${h.wheel}</td><td>${esc((h.brand+' '+h.model).trim())}</td><td>${h.widthMm} mm</td><td>${fmtD(h.installMs)}</td><td>${fmtD(h.removedMs)}</td><td>${dR(h.km)} ${dU()}</td></tr>`).join('')}</tbody></table></div></div>`:''}
   <button data-tab="home" style="width:100%">Save and see my tires</button><p class="mute">Everything you enter saves on this device automatically.</p>`;
 }
-function viewSettings(){return segBar(STABS,stab,'data-stab')+({bike:viewBike,data:viewData,log:viewLog,model:viewModel}[stab]||viewBike)()}
+function viewSettings(){return segBar(STABS,stab,'data-stab')+({bike:viewBike,data:viewData,log:viewLog,punct:viewPunct,model:viewModel}[stab]||viewBike)()+`<p class="mute" style="text-align:center;margin:14px 0 0">TyreGuru build ${BUILD}</p>`}
 const TABS=[['home','Home',viewHome],['trends','Trends',viewTrends],['settings','Settings',viewSettings]];
 function patternsOn(){const m=(S&&S.rider&&S.rider.pat)||'auto';return m==='on'||(m==='auto'&&window.__diffNoColor===true)}
 window.addEventListener('a11ychange',()=>{try{render(true)}catch(e){}});
@@ -1068,6 +1273,7 @@ function render(keepFocus){applyCb();syncRear();
   const root=$('#root');const ae=document.activeElement&&document.activeElement.id;
   root.innerHTML=`<div class="wrap"><div class="top"><h1 style="display:flex;align-items:center;gap:10px"><img src="data:image/png;base64,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" width="40" height="40" alt="" style="border-radius:9px;flex:none">TyreGuru</h1></div>${TABS.find(t=>t[0]===tab)[2]()}</div><nav aria-label="Sections"><div class="in">${TABS.map(t=>`<button data-tab="${t[0]}" aria-current="${t[0]===tab}">${t[1]}</button>`).join('')}</div></nav>`;
   if(keepFocus&&ae){const e=document.getElementById(ae);if(e){e.focus();try{e.setSelectionRange(e.value.length,e.value.length)}catch(_){}}}
+  try{checkAlerts()}catch(_){}
 }
 function setPath(path,val){const p=path.split('.');let o=S;for(let i=0;i<p.length-1;i++)o=o[p[i]];o[p[p.length-1]]=val;S.example=S.example}
 
@@ -1113,11 +1319,11 @@ async function importFiles(files){
 function buildPrompt(){
   const out=S.tires.map(t=>{const A=advice(t);return {wheel:t.wheel,tire:`${t.brand} ${t.model||''} (${t.type}) ${t.widthMm} mm, ${Math.round(wear(t).km)} km since install, condition ${wear(t).cond}`,sealant:{brand:t.sealant.brand,appliedOn:fmtD(t.sealant.dateMs),mlPutIn:t.sealant.ml,estimatedMlLeft:Math.round(A.sealant.leftMl),rangeMl:[Math.round(A.sealant.lowMl),Math.round(A.sealant.highMl)],heatAdjustedAgeDays:Math.round(A.sealant.effDays),lifeDays:Math.round(A.sealant.lifeDays),sealsLogged:A.sealant.eventCount,calculationSays:A.sealant.needAdd?`add ${A.sealant.addMl} ml`:'no sealant needed',checks:t.checks.map(c=>fmtD(c.dateMs)+' '+c.level)},
     air:A.air.known?{targetPsi:A.tgt,estimatedPsiNow:Math.round(A.air.estPsi),daysSinceFill:Math.round(A.air.days),leakPctPerDay:+A.air.leak.pct.toFixed(2),calculationSays:A.air.needAir?`add air, fill to ${A.air.fillTo} psi`:A.air.tooHigh?'let air out':'no air needed'}:{targetPsi:A.tgt,note:'no fill logged'}}});
-  const r=S.rides.slice(-30);
+  const r=S.rides.filter(x=>!isProv(x)).slice(-30);
   return `You are the assistant inside TyreGuru, a tubeless tire sealant and air pressure estimator for cyclists. Review the calculated estimates below. The numbers are estimates from a simple model with untested placeholder constants, not measurements.
 Rules: keep safety first. Never claim certainty. If the calculation and the data disagree or the confidence is low, say what the rider should check by hand (feel the sealant, use a gauge). Do not invent data. Keep numbers consistent with the calculation unless you explain a specific reason.
-Rider ${S.rider.riderKg} kg, bike ${S.rider.bikeKg} kg, terrain ${S.rider.terrain}, surface ${S.rider.surface}. Ride temperature ${rideC()!=null?Math.round(rideC())+' C':'unknown'}.${US()?' The rider is in the United States: write your answer in US units (miles, degrees F, fluid ounces, pounds) even though the data above is metric.':''}
-Recent rides (${S.rides.length} total, last ${r.length}): ${r.map(x=>`${fmtD(x.startMs)} ${x.hours.toFixed(1)}h ${x.km!=null?Math.round(x.km)+'km':''} air ${x.tempC!=null?Math.round(x.tempC):'?'}C road ${x.roadC!=null?Math.round(x.roadC):'?'}C`).join('; ')}
+Rider ${S.rider.wManual?S.rider.riderKg+' kg':'weight not shared'}, bike ${S.rider.bikeKg} kg, terrain ${S.rider.terrain}, surface ${S.rider.surface}. Ride temperature ${rideC()!=null?Math.round(rideC())+' C':'unknown'}.${US()?' The rider is in the United States: write your answer in US units (miles, degrees F, fluid ounces, pounds) even though the data above is metric.':''}
+Recent rides from the rider's own files (last ${r.length}): ${r.map(x=>`${fmtD(x.startMs)} ${x.hours.toFixed(1)}h ${x.km!=null?Math.round(x.km)+'km':''} air ${x.tempC!=null?Math.round(x.tempC):'?'}C road ${x.roadC!=null?Math.round(x.roadC):'?'}C`).join('; ')}
 ${S.example?'NOTE: this is example data, not a real rider.':''}
 Estimates: ${JSON.stringify(out)}
 Answer in plain language, under 170 words, in this format: one line per tire for air, one line per tire for sealant (action, amount, one-sentence reason), then one line "Check by hand:" with the single most useful manual check, then one line "Biggest uncertainty:".`;
@@ -1127,7 +1333,14 @@ async function askAI(){
   aiBusy=true;aiOut=null;render();
   try{
     const sample=window.claude&&await window.claude.use('sample');
-    if(!sample){aiOut='<p class="mute">AI review is only available when this page is open inside Claude. The red and green advice above does not need it.</p>';}
+    if(!sample&&aiUrl()){
+      const r=await aiProxy('/review',{method:'POST',body:JSON.stringify({prompt:buildPrompt()})});
+      const j=r.j||{};
+      if(r.status===200&&j.text)aiOut=`<pre class="ai">${esc(j.text)}</pre><p class="mute">AI text can be wrong. The decisions above come from the calculation.</p>`;
+      else if(j.error==='not_configured')aiOut='<p class="mute">The AI review service is not switched on yet (it has no key). The red and green advice above does not need it.</p>';
+      else aiOut=`<p class="mute">The AI review could not run: ${esc(j.message||('the service answered '+r.status))} The calculation above still applies.</p>`;
+    }
+    else if(!sample){aiOut='<p class="mute">AI review is not set up in this app yet. It works inside Claude, or once an AI review service address is added on the Data tab. The red and green advice above does not need it.</p>';}
     else{const r=await sample(buildPrompt(),{cache:false,onText:({text})=>{aiOut=`<pre class="ai">${esc(text)}</pre>`;render(true);}});aiOut=`<pre class="ai">${esc(r.text)}</pre><p class="mute">AI text can be wrong. The decisions above come from the calculation.</p>`;}
   }catch(e){aiOut=`<p class="mute">The AI review could not run (${esc(e&&e.message||e&&e.code||'error')}). The calculation above still applies.</p>`;}
   aiBusy=false;render();
@@ -1135,9 +1348,11 @@ async function askAI(){
 
 /* ---------- events ---------- */
 function netErr(e){return /fetch|network|load failed|blocked|Failed/i.test(e.message)?'Could not reach the weather service. Pages opened inside Claude block web requests. Use the downloaded standalone file, or enter the temperature by hand.':e.message}
+document.addEventListener('pointerdown',()=>alUnlock(),{passive:true});
 document.addEventListener('keydown',ev=>{if((ev.key==='Enter'||ev.key===' ')&&ev.target&&ev.target.classList&&ev.target.classList.contains('tap')||(ev.key==='Enter'&&ev.target&&ev.target.classList&&ev.target.classList.contains('bikesel'))){ev.preventDefault();ev.target.click()}});
 document.addEventListener('click',async ev=>{
   const op=ev.target.closest('[data-open]');if(op){detail=+op.dataset.open;render();window.scrollTo(0,0);return}
+  const ph=ev.target.closest('[data-ph]');if(ph){const g=ph.dataset.ph.split(':'),d=pdraft(+g[0]);d.hole=+g[1];d.ml=null;render(true);return}
   const sg=ev.target.closest('[data-stab]');if(sg){stab=sg.dataset.stab;render();window.scrollTo(0,0);return}
   const tg=ev.target.closest('[data-tr]');if(tg){trI=+tg.dataset.tr;render();return}
   const gt=ev.target.closest('[data-goto]');if(gt){const g=gt.dataset.goto.split(':');tab=g[0];if(g[1])stab=g[1];detail=null;render();window.scrollTo(0,0);return}
@@ -1156,7 +1371,9 @@ document.addEventListener('click',async ev=>{
     S.tireHistory=(S.tireHistory||[]).concat([{wheel:t.wheel,brand:t.brand,model:t.model,widthMm:t.widthMm,installMs:t.installMs,removedMs:dt,km:wear(t).km}]);
     Object.assign(t,{brand,model,type:v('c_y')||typeGuess({brand,model,nominalMm:nom})||(nom<=32?'road':nom>=45?'mtb':'gravel'),typeManual:!!v('c_y'),measManual:false,nominalMm:nom,widthMm:meas,installMs:dt,condition:'auto',fills:[],checks:[],cal:null,maxPsi:0,maxAuto:null,maxManual:false,
       sealant:{brand:v('c_sb'),ml:ml>0?ml:(TG.doseInfo(meas,v('c_sb'),S.tires&&S.tires[0]?S.tires[0].type:'gravel').init||TG.fullDoseMl(meas,v('c_sb'),S.tires&&S.tires[0]?S.tires[0].type:'gravel',S.tires&&S.tires[0]?S.tires[0].doseLevel:'standard')),dateMs:dt,events:[]}});
-    autoMax(t);S.rearSame=sameTires();S.sealSame=false;syncRear();if(+i===0)autoTerrain();S.example=false;changing=null;save();render();window.scrollTo(0,0)}
+    autoMax(t);addCustomTire(t);addCustomSealant(t.sealant.brand);S.rearSame=sameTires();S.sealSame=false;syncRear();if(+i===0)autoTerrain();S.example=false;changing=null;save();render();window.scrollTo(0,0)}
+  else if(act==='alack'){const a=AL();alDanger().forEach(q=>{a.ack[q.id]=true});alStop();save();render()}
+  else if(act==='altest'){alUnlock();alFire(b.dataset.k==='danger'?'danger':'chirp',true)}
   else if(act==='pirelli'){S.tires.forEach(t=>{t.brand='Pirelli';t.model='P Zero Race TLR 4S';t.type='road';t.widthMm=32;t.nominalMm=32;t.maxPsi=80;t.maxAuto='bicyclerollingresistance.com';t.maxManual=false;t.cal={psi:t.wheel==='rear'?60.5:59,kg:135/2.20462,widthMm:32,terrain:'worn'}});S.rider.terrain='worn';S.rearSame=true;S.example=false;save();render()}
   else if(act==='clearex'){S=Object.assign(example(),{example:false,rides:[],tires:example().tires.map(t=>Object.assign(t,{fills:[],sealant:Object.assign(t.sealant,{events:[]})}))});save();render()}
   else if(act==='usew'){S.rider.riderKg=+S.weights[S.weights.length-1].kg.toFixed(1);save();render()}
@@ -1166,7 +1383,10 @@ document.addEventListener('click',async ev=>{
     if(!code){msg.strava='Paste the address from step 3.';return render(true)}
     try{msg.strava='Connecting…';render(true);await stravaTokenCall({client_id:x.id,client_secret:x.secret,code,grant_type:'authorization_code'});msg.strava='Connected.';render(true);await stravaSync(true)}catch(e){msg.strava='Strava: '+e.message;render(true)}}
   else if(act==='stsync'){await stravaSync(true)}
-  else if(act==='stdisc'){const x=stv();S.strava={id:x.id,secret:x.secret};S.rides=S.rides.filter(r=>r.source!=='Strava');S.weights=S.weights.filter(w=>w.src!=='Strava');msg.strava='Disconnected. Strava rides removed from this app.';save();render()}
+  else if(act==='csvmake'){exp.csv=buildCsv();msg.csv='Ready. Copy it or download it, then paste it into Excel or Google Sheets.';render(true)}
+  else if(act==='csvcopy'){try{await navigator.clipboard.writeText(exp.csv);msg.csv='Copied.'}catch(e){const t=$('#csvout');if(t){t.select();msg.csv='Select all and copy.'}}render(true)}
+  else if(act==='csvdl'){try{const u=URL.createObjectURL(new Blob([exp.csv],{type:'text/csv'})),a=document.createElement('a');a.href=u;a.download='tyreguru-data.csv';document.body.appendChild(a);a.click();a.remove();msg.csv='If nothing downloaded, use Copy CSV.'}catch(e){msg.csv='Download is not available here. Use Copy CSV.'}render(true)}
+  else if(act==='stdisc'){await stravaRevoke();const x=stv();S.strava={id:x.id,secret:x.secret};S.rides=S.rides.filter(r=>r.source!=='Strava');S.weights=S.weights.filter(w=>w.src!=='Strava');msg.strava='Disconnected. Strava rides removed from this app.';save();render()}
   else if(act==='icusync'){const x=sx('icu');if(!x.key){msg.s_icu='Enter the API key first.';return render(true)}if(!x.id)x.id='0';save();await icuSync(true)}
   else if(act==='icudisc'){const x=sx('icu');S.src.icu={id:x.id,key:x.key};S.rides=S.rides.filter(r=>r.source!=='Intervals.icu');S.weights=S.weights.filter(w=>w.src!=='Intervals.icu');msg.s_icu='Disconnected. Intervals.icu data removed from this app.';save();render()}
   else if(act==='srcopen'){const k=b.dataset.k,x=sx(k);if(!x.id||!x.secret){msg['s_'+k]='Enter the Client ID and Client secret first.';return render(true)}save();window.open(OAUTHS[k].authUrl(x),'_blank')}
@@ -1175,7 +1395,7 @@ document.addEventListener('click',async ev=>{
     try{msg['s_'+k]='Connecting…';render(true);await c.token({grant_type:'authorization_code',code,redirect_uri:'http://localhost'});msg['s_'+k]='Connected.';render(true);await srcSync(k,true)}catch(e){msg['s_'+k]=c.name+': '+e.message;render(true)}}
   else if(act==='srcsync'){await srcSync(b.dataset.k,true)}
   else if(act==='srcdisc'){const k=b.dataset.k,c=OAUTHS[k],x=sx(k);S.src[k]={id:x.id,secret:x.secret};S.weights=S.weights.filter(w=>w.src!==c.name);autoWeight();msg['s_'+k]='Disconnected. '+c.name+' data removed from this app.';save();render()}
-  else if(act==='nowwx'){try{if(!S.home)throw new Error('Set a location in Settings, Data first.');msg.now='Looking up…';render();const c=await ENV.nowConditions(S.home,S.rider.surface,S.a);Object.assign(now,c);msg.now='';}catch(e){msg.now=netErr(e)}render()}
+  else if(act==='nowwx'){try{if(!S.home)throw new Error('Set a location in Settings, Data first.');msg.now='Looking up…';render();const c=await nowWithTraffic();Object.assign(now,c);msg.now='';}catch(e){msg.now=netErr(e)}render()}
   else if(act==='geo'){const v=$('#place').value.trim();if(!v)return;try{msg.loc='Searching…';render();const p=await ENV.geocode(v);S.home=Object.assign(p,{manual:true});msg.loc='';save();fetchNow()}catch(e){msg.loc=netErr(e)}render()}
   else if(act==='gps'){await autoLocate(true)}
   else if(act==='enrich'){try{if(!S.home&&!S.rides.some(r=>r.lat!=null))throw new Error('Set a location first.');msg.enr='Working…';render();const r=await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,(d,f,t)=>{msg.enr=`${d} of ${t} rides done`;});msg.enr=`Added weather to ${r.done} of ${r.total} rides${r.fail?`. ${r.fail} could not be looked up (no connection or no data).`:'.'}`;save()}catch(e){msg.enr=netErr(e)}render()}
@@ -1190,26 +1410,50 @@ document.addEventListener('click',async ev=>{
   else if(act==='homesave'){const k=+b.dataset.i,t=S.tires[k],pv=$('#ha'+k).value,v=Math.round(parseFloat(pv)*10)/10,lv=$('#hs'+k).value,done=[];
     if(pv!==''&&!(v>0&&v<200)){msg['h'+k]='Enter the pressure on your gauge, in PSI.';return render(true)}
     if(pv===''&&!lv){msg['h'+k]='Enter a pressure, pick a sealant level, or both.';return render(true)}
-    if(pv!==''){t.fills.push({dateMs:Date.now(),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});done.push('air '+v+' PSI')}
+    if(pv!==''){t.fills.push({dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});done.push('air '+v+' PSI')}
     if(lv){t.checks.push({dateMs:Date.now(),level:lv});done.push('sealant "'+lv+'"')}
     S.example=false;msg['h'+k]='Saved '+done.join(' and ')+'.';save();render(true)}
   else if(act==='gauge'){const t=S.tires[+b.dataset.i],v=Math.round(parseFloat($('#gp').value)*10)/10;if(!(v>0&&v<200)){msg.gauge='Enter the pressure on your gauge, in PSI.';return render(true)}
-    t.fills.push({dateMs:Date.now(),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.gauge='Saved. The estimate now starts from '+v+' PSI.';save();render(true)}
+    t.fills.push({dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.gauge='Saved. The estimate now starts from '+v+' PSI.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render(true)}
   else if(act==='logair'){const t=tire(),af=parseFloat($('#la').value),be=parseFloat($('#lb').value);if(isNaN(af)&&isNaN(be)){msg.log='Enter the reading or the pressure after filling.';return render()}
-    t.fills.push({dateMs:dateMs(),beforePsi:isNaN(be)?null:be,afterPsi:isNaN(af)?be:af,fillC:(()=>{const x=parseFloat($('#lc').value);return isNaN(x)?20:tC(x)})(),altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.log='Air entry saved.';save();render()}
+    t.fills.push({dateMs:dateMs(),beforePsi:isNaN(be)?null:be,afterPsi:isNaN(af)?be:af,fillC:(()=>{const x=parseFloat($('#lc').value);return isNaN(x)?20:tC(x)})(),altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.log='Air entry saved.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render()}
   else if(act==='logcheck'){tire().checks.push({dateMs:dateMs(),level:$('#ll').value});msg.log='Sealant check saved. The life estimate has been adjusted.';save();render()}
+  else if(act==='airout'){const i=+b.dataset.i,t=S.tires[i],x=tireStatus(t),amt=parseFloat($('#ao'+i).value);
+    if(!x.ar.known){msg['a'+i]='Log a fill or a gauge reading first.';return render(true)}
+    if(!(amt>0)){msg['a'+i]='Enter how many PSI you let out.';return render(true)}
+    const est=x.ar.estPsi,after=Math.max(0,Math.round((est-amt)*10)/10);
+    t.fills.push({dateMs:fillStamp(t),beforePsi:Math.round(est*10)/10,afterPsi:after,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;
+    delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];msg['a'+i]='Saved. Air estimate was '+(Math.round(est*10)/10)+' PSI, now '+after+' PSI.';save();render(true)}
+  else if(act==='sealout'){const i=+b.dataset.i,t=S.tires[i],ml=vIn(parseFloat($('#so'+i).value));
+    if(!(ml>0)){msg['a'+i]='Enter how much sealant you removed, in '+vU()+'.';return render(true)}
+    const b0=sealantStateFor(t,S.rides,Date.now()).leftMl;
+    t.sealant.events.push({dateMs:evStamp(t),ml:Math.round(ml*10)/10,kind:'removed'});S.example=false;
+    const st=sealantStateFor(t,S.rides,Date.now());msg['a'+i]=sealChange(t,b0,st.leftMl,'removed');save();render(true)}
+  else if(act==='aitest'){msg.aisvc='Testing…';render(true);try{const r=await aiProxy('/health',{method:'GET'});const j=r.j;msg.aisvc=!j||!j.ok?'That address did not answer like a TyreGuru service (status '+r.status+').':(j.configured?'Connected and switched on.'+(j.codeRequired&&!aiS().code?' It wants an access code.':''):'Connected. The service is deployed but has no key yet, so reviews stay off until you add one.')}catch(err){msg.aisvc='Could not reach it: '+err.message}render(true)}
+  else if(act==='trafficnow'){msg.now='Looking up…';render(true);await fetchNow();render(true)}
+  else if(act==='puncsave'){const i=+b.dataset.i,t=S.tires[i],d=pdraft(i),inp=$('#pm'+i),mlv=inp&&inp.value!==''?vIn(parseFloat(inp.value)):puncMl(t,d.hole,d.kind);
+    if(!(mlv>=0)||isNaN(mlv)){msg['p'+i]='Enter the sealant lost, in '+vU()+'.';return render(true)}
+    const b0=sealantStateFor(t,S.rides,Date.now()).leftMl;
+    t.sealant.events.push({dateMs:evStamp(t),ml:Math.round(mlv*10)/10,holeMm:d.hole,kind:d.kind});S.example=false;
+    pd[i]={hole:d.hole,kind:'sealed',ml:null};const st=sealantStateFor(t,S.rides,Date.now());
+    msg['p'+i]=sealChange(t,b0,st.leftMl,'puncture')+(d.kind==='flat'?' Check the tire before you ride.':'');save();render(true)}
   else if(act==='logpunc'){tire().sealant.events.push({dateMs:dateMs(),ml:S.a.mlPerSealEvent});msg.log='Puncture saved.';save();render()}
   else if(act==='logadd'){const ml=vIn(parseFloat($('#am').value));if(!(ml>0)){msg.log='Enter how much sealant you added, in '+vU()+'.';return render()}
-    if(!$('#ab').value){msg.log='Choose the sealant brand you added.';return render()}
-    const t=tire(),s=sealantStateFor(t,S.rides,dateMs());t.sealant={brand:$('#ab').value,ml:Math.min(TG.fullDoseMl(t.widthMm,$('#ab').value,t.type,t.doseLevel),Math.round(s.leftMl+ml)),dateMs:dateMs(),events:[]};S.sealSame=false;msg.log=`Sealant added. Estimated amount now ${vfmt(t.sealant.ml)}, treated as fresh from ${fmtD(t.sealant.dateMs)}.`;save();render()}
+    if(!$('#ab').value.trim()){msg.log='Type or choose the sealant brand you added.';return render()}
+    addCustomSealant($('#ab').value);
+    const t=tire(),s=sealantStateFor(t,S.rides,dateMs());t.sealant={brand:$('#ab').value.trim(),ml:Math.min(TG.fullDoseMl(t.widthMm,$('#ab').value,t.type,t.doseLevel),Math.round(s.leftMl+ml)),dateMs:dateMs(),events:[]};S.sealSame=false;msg.log=`Sealant added. Estimated amount now ${vfmt(t.sealant.ml)}, treated as fresh from ${fmtD(t.sealant.dateMs)}.`;save();render()}
   else if(act==='defaults'){S.a=Object.assign({},TG.DEFAULTS);save();render()}
   else if(act==='copy'){const ta=$('#bk');try{await navigator.clipboard.writeText(ta.value);msg.bk='Copied.'}catch(e){ta.select();msg.bk='Text selected. Copy it with your keyboard.'}render()}
-  else if(act==='restore'){try{const j=JSON.parse($('#bk').value);if(!j.tires||!j.rider)throw new Error('not a TyreGuru backup');S=j;S.a=Object.assign({},TG.DEFAULTS,S.a);save();msg.bk='Restored.'}catch(e){msg.bk='Could not restore: '+e.message}render()}
-  else if(act==='wipe'){if(b.dataset.sure!=='1'){b.dataset.sure='1';b.textContent='Tap again to erase everything';return}try{localStorage.removeItem(KEY)}catch(e){}S=example();msg={};render()}
+  else if(act==='restore'){try{const j=JSON.parse($('#bk').value);if(!j.tires||!j.rider)throw new Error('not a TyreGuru backup');const keepSt=S.strava,keepSrc=S.src,keepTr=S.traffic,keepAi=S.ai;S=j;if(keepAi)S.ai=keepAi;if(keepSt)S.strava=keepSt;if(keepSrc)S.src=keepSrc;if(keepTr&&keepTr.key)S.traffic=Object.assign({},S.traffic||{},{key:keepTr.key});S.a=Object.assign({},TG.DEFAULTS,S.a);save();msg.bk='Restored.'}catch(e){msg.bk='Could not restore: '+e.message}render()}
+  else if(act==='alopen'){const pl=alOpenPlan();msg.alopen=(AL().open?'':'The open-app sound is Off above. ')+pl.map(q=>q.nm+': '+(q.kind==='danger'?'alarm':q.kind==='chirp'?'chirp':'quiet')+' ('+q.why+')').join('. ')+'.';alOpenCheck();render(true)}
+  else if(act==='wipe'){if(b.dataset.sure!=='1'){b.dataset.sure='1';b.textContent='Tap again to erase everything';return}try{localStorage.removeItem(KEY)}catch(e){}await stravaRevoke();S=example();window.__nativeState=null;msg={};exp={rides:true,weight:true,csv:''};save();render()}
 });
 document.addEventListener('focusin',ev=>{const e=ev.target;if(e&&e.tagName==='INPUT'&&e.list){setTimeout(()=>{if(S.example&&/^Example/.test(e.value)){try{e.setSelectionRange(0,e.value.length)}catch(_){}}},0)}});
 document.addEventListener('input',ev=>{
   const e=ev.target;
+  if(e&&e.dataset&&(e.dataset.aiu||e.dataset.aic)){const x=aiS();if(e.dataset.aiu)x.url=e.value.trim();else x.code=e.value.trim();save();const bt=document.querySelector('[data-act=aitest]');if(bt)bt.disabled=!aiUrl();return}
+  if(e&&e.dataset&&e.dataset.tk){trf().key=e.value.trim();save();const bt=document.querySelector('[data-act=trafficnow]');if(bt)bt.disabled=!(trf().key&&S.home);return}
+  if(e&&e.dataset&&e.dataset.pml!==undefined){const d=pdraft(+e.dataset.pml),x=parseFloat(e.value);d.ml=isNaN(x)?null:vIn(x);return}
   /* brand field: typing a space finishes the word from the brand list ("P" + space becomes "Pirelli ") */
   if(e.tagName==='INPUT'&&e.getAttribute('list')==='dl-brand'&&ev.inputType==='insertText'&&ev.data===' '){
     const raw=e.value.replace(/\s+$/,'');
@@ -1236,14 +1480,91 @@ document.addEventListener('input',ev=>{
   if(!Object.keys(e.dataset||{}).length)return;   // plain entry boxes (log forms) are read on Save; re-rendering would wipe what you typed
   clearTimeout(window.__rt);window.__rt=setTimeout(()=>{if(tab==='settings')render(true)},900);
 });
-document.addEventListener('change',ev=>{const e=ev.target;if(e.dataset&&e.dataset.stbike){stv().bikeId=isNaN(+e.value)?e.value:+e.value;save();stravaSync(true);return}
+document.addEventListener('change',ev=>{const e=ev.target;if(e.dataset&&e.dataset.cs){const added=addCustomSealant(e.value);if(added){save();render(true)}return}
+  if(e.dataset&&e.dataset.f){const tm=/^tires\.(\d+)\.(brand|model|maxPsi|nominalMm)$/.exec(e.dataset.f);if(tm&&S.tires[+tm[1]]&&addCustomTire(S.tires[+tm[1]])){save();render(true)}}
+  if(e.dataset&&e.dataset.tn){trf().on=e.value==='1';save();if(!trf().on){if(now.roadBaseC!=null)now.roadC=now.roadBaseC;now.roadBaseC=null;now.traffic=null}if(trf().on&&trf().key&&S.home)fetchNow();else render(true);return}if(e.dataset&&e.dataset.pk!==undefined){const d=pdraft(+e.dataset.pk);d.kind=e.value;d.ml=null;render(true);return}if(e.dataset&&e.dataset.exp){exp[e.dataset.exp]=!!e.checked;exp.csv='';render(true);return}if(e.dataset&&e.dataset.alv){const a=AL(),k=e.dataset.alv;a[k]=(k==='mode'||k==='cue'||k==='where')?e.value:e.value==='1';if(k==='danger'&&!a.danger)alStop();save();alSchedule(true);render(true);return}if(e.dataset&&e.dataset.stbike){stv().bikeId=isNaN(+e.value)?e.value:+e.value;save();stravaSync(true);return}
   if(e.id==='lt'&&window.__est){const x=window.__est[+e.value];if(x){$('#la').placeholder='target '+x.tgt+', blank if no air added'}}
   if(e.id==='files'&&e.files.length){msg.imp='Reading…';render();importFiles(Array.from(e.files));}
   else if(e.tagName==='SELECT'&&e.dataset&&(e.dataset.f||e.dataset.d||e.dataset.a)){setTimeout(()=>render(true),0)}});
+/* ---------- Data and privacy ----------
+   Rules this app follows, to match the services it reads from:
+   - Everything stays on this device. No TyreGuru account or server.
+   - Strava (API terms reported by Terra, Sept 2026): own account only, read only, stored for at most 7 days then read again,
+     never used for AI, access revoked and data deleted on disconnect.
+   - Apple Health: read only, never uploaded, never used for advertising.
+   - Backups and exports leave out sign-in keys and anything read from a connected service. */
+const PROV_RE=/strava|apple|health|intervals|withings|whoop|garmin connect/i;
+const STRAVA_CACHE_MS=7*864e5;
+const isProv=x=>PROV_RE.test(String((x&&(x.source||x.src))||''));
+let exp={rides:true,weight:true,csv:''};
+function cleanCopy(){const c=JSON.parse(JSON.stringify(S));delete c.strava;delete c.src;delete c.ai;if(c.traffic)c.traffic={on:!!c.traffic.on,key:''};
+  c.rides=(c.rides||[]).filter(r=>!isProv(r)).map(r=>{const o=Object.assign({},r);delete o.lat;delete o.lon;return o});
+  c.weights=(c.weights||[]).filter(w=>!isProv(w));if(c.home)delete c.home;return c}
+function pruneStrava(){const now=Date.now();let ch=false;
+  S.rides=(S.rides||[]).filter(r=>{if(r.source!=='Strava')return true;if(!r.fetchedMs){r.fetchedMs=now;ch=true;return true}if(now-r.fetchedMs>STRAVA_CACHE_MS){ch=true;return false}return true});
+  S.weights=(S.weights||[]).filter(w=>{if(w.src!=='Strava')return true;if(!w.fetchedMs){w.fetchedMs=now;ch=true;return true}if(now-w.fetchedMs>STRAVA_CACHE_MS){ch=true;return false}return true});
+  if(ch){try{autoWeight()}catch(e){}save()}}
+async function stravaRevoke(){const x=stv();if(!x.refresh&&!x.access)return;
+  await Promise.race([stravaRevoke2(x),new Promise(r=>setTimeout(r,5000))])}
+async function stravaRevoke2(x){
+  try{const r=await net('https://www.strava.com/oauth/revoke',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Authorization':'Basic '+btoa((x.id||'')+':'+(x.secret||''))},body:'token='+encodeURIComponent(x.refresh||x.access)});
+    if(r.status>=400&&x.access)await net('https://www.strava.com/oauth/deauthorize',{method:'POST',headers:{Authorization:'Bearer '+x.access}})}catch(e){}}
+const csvCell=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+const isoD=ms=>ms?new Date(ms).toISOString().slice(0,10):'';
+/* CSV: one table, one row per record. "record" says what the row is. Every measurement the app holds is here, in metric units and PSI, with trend rows at the end. */
+const isoT=ms=>ms?new Date(ms).toISOString().slice(0,16)+'Z':'';
+const CSV_COLS=['record','date_time','wheel','tire','width_mm','nominal_width_mm','rim_width_mm','tire_type','max_psi','hookless','installed_date',
+ 'sealant_brand','sealant_dose_ml','sealant_applied_date','air_target_psi','air_low_line_psi','air_estimate_psi','leak_pct_per_day','sealant_estimate_ml','sealant_percent_of_full_dose',
+ 'air_before_psi','air_after_psi','air_change_psi','fill_temp_c','altitude_m','sealant_check_level','puncture_hole_mm','puncture_kind','sealant_lost_ml','sealant_removed_ml',
+ 'ride_hours','ride_km','ride_air_c','ride_road_c','body_weight_kg','rider_kg','bike_kg','terrain','surface','traffic_speed_kmh','traffic_free_flow_kmh','traffic_road_adjust_c','note'];
+function buildCsv(){
+  const rows=[CSV_COLS],R=o=>rows.push(CSV_COLS.map(c=>o[c]==null?'':o[c])),r1=v=>v==null||isNaN(v)?'':Math.round(v*10)/10;
+  const nowMs=Date.now(),own=S.rides.filter(r=>!isProv(r));
+  R({record:'rider',date_time:isoT(nowMs),rider_kg:r1(S.rider.riderKg),bike_kg:r1(S.rider.bikeKg),terrain:S.rider.terrain,surface:S.rider.surface,note:'units in this file are metric and PSI'});
+  S.tires.forEach(t=>{let A=null;try{A=advice(t)}catch(e){}const full=TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel)||0,base={wheel:t.wheel,tire:`${t.brand||''} ${t.model||''}`.trim()};
+    R(Object.assign({},base,{record:'tire',date_time:isoT(nowMs),width_mm:t.widthMm,nominal_width_mm:t.nominalMm,rim_width_mm:t.rimMm,tire_type:t.type,max_psi:t.maxPsi>0?t.maxPsi:'',hookless:t.hookless?'yes':'',installed_date:isoD(t.installMs),
+      sealant_brand:t.sealant.brand,sealant_dose_ml:t.sealant.ml,sealant_applied_date:isoD(t.sealant.dateMs),
+      air_target_psi:A?r1(A.tgt):'',air_low_line_psi:A?r1(A.tgt*0.8):'',air_estimate_psi:A&&A.air&&A.air.known?r1(A.air.estPsi):'',leak_pct_per_day:A&&A.air&&A.air.known?Math.round(A.air.leak.pct*100)/100:'',
+      sealant_estimate_ml:A?Math.round(A.sealant.leftMl):'',sealant_percent_of_full_dose:A&&full?Math.round(100*A.sealant.leftMl/full):'',note:A?(A.sealant.needAdd?'sealant low: add '+A.sealant.addMl+' ml':'sealant ok'):''}));
+    (t.fills||[]).slice().sort((x,y)=>x.dateMs-y.dateMs).forEach(f=>{const d=f.beforePsi!=null?f.afterPsi-f.beforePsi:null;
+      R(Object.assign({},base,{record:'air',date_time:isoT(f.dateMs),air_before_psi:r1(f.beforePsi),air_after_psi:r1(f.afterPsi),air_change_psi:d==null?'':r1(d),fill_temp_c:r1(f.fillC),altitude_m:f.altM!=null?Math.round(f.altM):'',
+        note:d==null?'reading or fill':(Math.abs(d)<0.05?'gauge reading':(d<0?'air let out':'air added'))}))});
+    (t.checks||[]).forEach(c=>R(Object.assign({},base,{record:'sealant_check',date_time:isoT(c.dateMs),sealant_check_level:c.level})));
+    (t.sealant.events||[]).forEach(e=>R(Object.assign({},base,e.kind==='removed'?{record:'sealant_removed',date_time:isoT(e.dateMs),sealant_removed_ml:r1(e.ml)}:{record:'puncture',date_time:isoT(e.dateMs),puncture_hole_mm:e.holeMm||'',puncture_kind:e.kind||'sealed',sealant_lost_ml:r1(e.ml||S.a.mlPerSealEvent)})));
+    /* trend: estimated air and sealant day by day, from the first entry to today. Built only from rides you entered or loaded from files. */
+    const starts=[t.sealant.dateMs,...(t.fills||[]).map(f=>f.dateMs)].filter(x=>x&&x<=nowMs),t0=Math.max(Math.min(...starts,nowMs),nowMs-400*DAY),steps=Math.min(400,Math.ceil((nowMs-t0)/DAY));
+    for(let k=0;k<=steps;k++){const ms=k===steps?nowMs:t0+k*DAY;let ar=null,sl=null;
+      try{const f2=(t.fills||[]).filter(f=>f.dateMs<=ms).sort((x,y)=>x.dateMs-y.dateMs);
+        if(f2.length&&A)ar=TG.airState({lastFill:f2[f2.length-1],fills:f2.slice(0,-1),targetPsi:A.tgt,nowMs:ms,nowC:null,nowAltM:null,a:S.a});
+        const t2=Object.assign({},t,{sealant:Object.assign({},t.sealant,{events:(t.sealant.events||[]).filter(e=>e.dateMs<=ms)}),checks:(t.checks||[]).filter(c=>c.dateMs<=ms)});sl=ms>=t.sealant.dateMs?sealantStateFor(t2,own,ms):null}catch(e){}
+      R(Object.assign({},base,{record:'trend',date_time:isoT(ms),air_target_psi:A?r1(A.tgt):'',air_low_line_psi:A?r1(A.tgt*0.8):'',air_estimate_psi:ar&&ar.known?r1(ar.estPsi):'',sealant_estimate_ml:sl?Math.round(sl.leftMl):'',sealant_percent_of_full_dose:sl&&full?Math.round(100*sl.leftMl/full):''}))}});
+  if(now.airC!=null)R({record:'conditions_now',date_time:isoT(nowMs),ride_air_c:r1(now.airC),ride_road_c:r1(now.roadC),altitude_m:now.elevation!=null?Math.round(now.elevation):'',
+    traffic_speed_kmh:now.traffic&&!now.traffic.err?Math.round(now.traffic.cur):'',traffic_free_flow_kmh:now.traffic&&!now.traffic.err?Math.round(now.traffic.free):'',traffic_road_adjust_c:now.traffic&&!now.traffic.err?r1(now.traffic.adj):''});
+  if(exp.rides)own.forEach(r=>R({record:'ride',date_time:isoT(r.startMs),ride_hours:r1(r.hours),ride_km:r1(r.km),ride_air_c:r1(r.tempC),ride_road_c:r1(r.roadC),note:r.source||''}));
+  if(exp.weight)S.weights.filter(w=>!isProv(w)).forEach(w=>R({record:'weight',date_time:isoT(w.ms),body_weight_kg:r1(w.kg)}));
+  return rows.map(r=>r.map(csvCell).join(',')).join('\r\n')}
+function dataCard(){return `<div class="card"><h2>Your data and privacy</h2>
+  <p class="mute" style="margin-top:0">TyreGuru has no account and no server of its own. What you enter stays on this device. It is not sold, not used for advertising and not used to train AI.</p>
+  <ul class="mute" style="margin:6px 0 8px 18px;padding:0">
+  <li><b>Strava.</b> Your own account, read only. Rides are kept for 7 days at a time, as Strava's rules for apps require, then read again. Strava data is never sent to the AI review. Disconnect revokes access and deletes what was read.</li>
+  <li><b>Apple Health.</b> Read only, only rides and weight you allow in the iPhone's own permission screen. Not uploaded anywhere and not used for advertising.</li>
+  <li><b>Intervals.icu (Garmin, Wahoo), Withings, WHOOP.</b> Your own account, read only. Disconnect removes what was read.</li>
+  <li><b>Weather and sealant list.</b> The app asks public services for the weather at your start place and for the sealant list. Nothing else leaves the phone unless you copy it yourself.</li>
+  <li><b>Backup and export.</b> Both leave out sign-in keys and anything read from a connected service.</li></ul>
+  <h3 style="margin:10px 0 4px">Export for a spreadsheet</h3>
+  <p class="mute" style="margin:0 0 6px">Makes a CSV file that opens in Excel or Google Sheets. It has your tires and settings, every air entry and gauge reading (including air let out), sealant checks, punctures with hole size and sealant lost, sealant removed, rides with temperatures, and day-by-day trend rows for air pressure and sealant. No names, no locations. Units are metric and PSI. To share test results, send the file yourself; the app never sends it for you.</p>
+  <label style="display:block;margin:4px 0"><input type="checkbox" data-exp="rides" ${exp.rides?'checked':''}> Include rides from my own files</label>
+  <label style="display:block;margin:4px 0"><input type="checkbox" data-exp="weight" ${exp.weight?'checked':''}> Include body weight I typed in</label>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button data-act="csvmake">Make CSV</button>${exp.csv?'<button class="ghost" data-act="csvcopy">Copy CSV</button><button class="ghost" data-act="csvdl">Download CSV</button>':''}</div>
+  ${exp.csv?`<textarea id="csvout" rows="5" readonly spellcheck="false" style="margin-top:8px">${esc(exp.csv)}</textarea>`:''}
+  <p class="mute" id="csvmsg" aria-live="polite">${esc(msg.csv||'')}</p></div>`}
+
 /* ---------- Strava (read only, your own account) ---------- */
+const BRIDGE_HOSTS=['strava.com','intervals.icu','withings.net','whoop.com'];   // the iPhone shell only forwards these; anything else must use the normal web request or it would wait forever
 function net(url,opt){opt=opt||{};
   const h=window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.http;
-  if(h)return new Promise((res,rej)=>{const id=String(Math.random());window.__httpWait=window.__httpWait||{};window.__httpWait[id]={res,rej};h.postMessage(JSON.stringify({id,url,method:opt.method||'GET',headers:opt.headers||{},body:opt.body||null}))});
+  let host='';try{host=new URL(url).hostname}catch(e){}
+  if(h&&BRIDGE_HOSTS.some(d=>host===d||host.endsWith('.'+d)))return new Promise((res,rej)=>{const id=String(Math.random());window.__httpWait=window.__httpWait||{};window.__httpWait[id]={res,rej};h.postMessage(JSON.stringify({id,url,method:opt.method||'GET',headers:opt.headers||{},body:opt.body||null}))});
   return fetch(url,opt).then(async r=>({status:r.status,text:await r.text()}))}
 window.__nativeHttp=(id,status,text,err)=>{const w=(window.__httpWait||{})[id];if(!w)return;delete window.__httpWait[id];err?w.rej(new Error(err)):w.res({status,text})};
 const stv=()=>{S.strava=S.strava||{};return S.strava};
@@ -1259,15 +1580,15 @@ async function stravaGet(path){await stravaFresh();const r=await net('https://ww
 const STRAVA_RIDES=['Ride','GravelRide','MountainBikeRide','EBikeRide','EMountainBikeRide','Handcycle'];
 let lastStrava=0;
 async function stravaSync(force){
-  const x=stv();if(!x.refresh)return;if(!force&&Date.now()-lastStrava<30*60*1000)return;lastStrava=Date.now();
+  const x=stv();if(!x.refresh)return;if(!force&&Date.now()-lastStrava<30*60*1000)return;lastStrava=Date.now();pruneStrava();
   try{msg.strava='Reading Strava…';render(true);
     const me=await stravaGet('/athlete');
     x.bikes=(me.bikes||[]).map(b=>({id:b.id,name:b.name||[b.brand_name,b.model_name].filter(Boolean).join(' ')||'Bike',km:(b.distance||0)/1000,primary:!!b.primary}));
     if(x.bikeId===undefined||!x.bikes.some(b=>b.id===x.bikeId))x.bikeId=(x.bikes.find(b=>b.primary)||x.bikes[0]||{}).id||'';
-    if(me.weight>0){const ms=Date.now();if(!S.weights.some(w=>w.src==='Strava'&&Math.abs(w.ms-ms)<864e5)){S.weights.push({ms,kg:me.weight,src:'Strava'});S.weights.sort((a,b)=>a.ms-b.ms);autoWeight()}}
+    if(me.weight>0){const ms=Date.now();if(!S.weights.some(w=>w.src==='Strava'&&Math.abs(w.ms-ms)<864e5)){S.weights.push({ms,kg:me.weight,src:'Strava',fetchedMs:Date.now()});S.weights.sort((a,b)=>a.ms-b.ms);autoWeight()}}
     const since=Math.min(...S.tires.map(t=>t.installMs||Date.now()),Date.now()-400*864e5);
     let all=[];for(let page=1;page<=8;page++){const a=await stravaGet('/athlete/activities?per_page=100&page='+page+'&after='+Math.floor(since/1000));all=all.concat(a);if(a.length<100)break}
-    const rides=all.filter(a=>STRAVA_RIDES.includes(a.sport_type||a.type)&&!a.trainer&&(!x.bikeId||!a.gear_id||a.gear_id===x.bikeId)).map(a=>({startMs:Date.parse(a.start_date),hours:(a.moving_time||0)/3600,km:(a.distance||0)/1000,tempC:a.average_temp!=null?a.average_temp:null,roadC:null,lat:a.start_latlng&&a.start_latlng[0]!=null?a.start_latlng[0]:undefined,lon:a.start_latlng&&a.start_latlng[1]!=null?a.start_latlng[1]:undefined,source:'Strava'}));
+    const rides=all.filter(a=>STRAVA_RIDES.includes(a.sport_type||a.type)&&!a.trainer&&(!x.bikeId||!a.gear_id||a.gear_id===x.bikeId)).map(a=>({startMs:Date.parse(a.start_date),hours:(a.moving_time||0)/3600,km:(a.distance||0)/1000,tempC:a.average_temp!=null?a.average_temp:null,roadC:null,lat:a.start_latlng&&a.start_latlng[0]!=null?a.start_latlng[0]:undefined,lon:a.start_latlng&&a.start_latlng[1]!=null?a.start_latlng[1]:undefined,source:'Strava',fetchedMs:Date.now()}));
     if(S.example){S.rides=[];S.example=false}
     S.rides=TG.dedupeRides(S.rides.filter(r=>r.source!=='Strava').concat(rides));
     x.last=Date.now();x.count=rides.length;msg.strava=`Strava read: ${rides.length} rides${x.bikes.length?', '+x.bikes.length+' bikes':''}.`;save();render(true);
@@ -1376,7 +1697,7 @@ async function autoHealth(){
   save();render(true);
 }
 let lastLoc=0,locBusy=false;
-async function fetchNow(){try{if(!S.home)return;msg.now='Looking up…';render(true);const c=await ENV.nowConditions(S.home,S.rider.surface,S.a);Object.assign(now,c);msg.now=''}catch(e){msg.now=netErr(e)}render(true)}
+async function fetchNow(){try{if(!S.home)return;msg.now='Looking up…';render(true);const c=await nowWithTraffic();Object.assign(now,c);msg.now=''}catch(e){msg.now=netErr(e)}render(true)}
 async function autoLocate(force){
   if(locBusy)return;
   if(!force&&S.home&&S.home.manual)return;
@@ -1399,9 +1720,10 @@ const SEALANT_URL='https://raw.githubusercontent.com/mpassman/TyreGuru/main/seal
   fetch(SEALANT_URL,{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&TG.setSealants(j)){try{localStorage.setItem('tg_sealants',JSON.stringify(j))}catch(e){}render()}}).catch(()=>{})})();
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
 (async()=>{if(!S.example)return;let had=null;try{had=localStorage.getItem(KEY)}catch(e){}if(had||window.__nativeState)return;const j=await idbGet();if(j&&loadJson(j))render()})();
-autoLocate();autoHealth();stravaSync();syncAll();
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){autoLocate();autoHealth();stravaSync();syncAll()}});
-window.__TG={get S(){return S},importFiles,render};
+pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();
+document.addEventListener('visibilitychange',()=>{if(document.hidden){alHiddenAt=Date.now();return}if(!document.hidden){if(alHiddenAt&&Date.now()-alHiddenAt>30000)alOpenCheck();alHiddenAt=0;try{if(tab==='home'&&detail===null)render(true);else checkAlerts()}catch(e){}autoLocate();autoHealth();stravaSync();syncAll()}});
+let alBeat=Date.now();setInterval(()=>{const n=Date.now();if(n-alBeat>30000&&!document.hidden)alOpenCheck();alBeat=n},2000);window.addEventListener('pageshow',ev=>{if(ev.persisted)alOpenCheck()});
+window.__TG={get S(){return S},importFiles,render,alOpenCheck};
 })();
 
 </script>

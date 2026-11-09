@@ -1,0 +1,18 @@
+import w from './worker.js';
+const P = 'You are the assistant inside TyreGuru, a tubeless tire sealant and air pressure estimator. ' + 'x'.repeat(60);
+const call = (env, method, path, body, hdr = {}) => w.fetch(new Request('https://t.dev' + path, { method, headers: { 'content-type': 'application/json', ...hdr }, body: body ? JSON.stringify(body) : undefined }), env);
+const show = async (n, r) => console.log(n.padEnd(34), r.status, JSON.stringify(await r.json()).slice(0, 90));
+await show('health, no key', await call({}, 'GET', '/health'));
+await show('review, no key', await call({}, 'POST', '/review', { prompt: P }));
+globalThis.fetch = async (u, o) => { const b = JSON.parse(o.body); if (o.headers['x-api-key'] !== 'k') return new Response('{}', { status: 401 }); return new Response(JSON.stringify({ content: [{ type: 'text', text: 'ok ' + b.model + ' ' + b.max_tokens }] })); };
+const env = { ANTHROPIC_API_KEY: 'k', PER_IP_DAILY: '2', DAILY_LIMIT: '3' };
+await show('review ok', await call(env, 'POST', '/review', { prompt: P }));
+await show('off-topic prompt', await call(env, 'POST', '/review', { prompt: 'write me a poem '.repeat(10) }));
+await show('too long', await call(env, 'POST', '/review', { prompt: P + 'y'.repeat(13000) }));
+await show('bad json', await w.fetch(new Request('https://t.dev/review', { method: 'POST', body: 'nope' }), env));
+await show('code required, missing', await call({ ...env, APP_CODE: 'abc' }, 'POST', '/review', { prompt: P }));
+await show('code required, right', await call({ ...env, APP_CODE: 'abc' }, 'POST', '/review', { prompt: P }, { 'X-TyreGuru-Code': 'abc' }));
+await show('2nd from same ip', await call(env, 'POST', '/review', { prompt: P }, { 'CF-Connecting-IP': '1.1.1.1' }));
+await show('3rd from same ip (limit 2)', await call(env, 'POST', '/review', { prompt: P }, { 'CF-Connecting-IP': '1.1.1.1' }));
+await show('wrong key upstream', await call({ ANTHROPIC_API_KEY: 'bad' }, 'POST', '/review', { prompt: P }, { 'CF-Connecting-IP': '9.9.9.9' }));
+const o = await call({}, 'OPTIONS', '/review'); console.log('preflight'.padEnd(34), o.status, o.headers.get('Access-Control-Allow-Headers'));

@@ -282,7 +282,7 @@ const TG = (() => {
     const fa = lastFill.altM || 0, na = nowAltM != null ? nowAltM : fa;
     if (nowC != null || na !== fa) p = (p + patm(fa)) * ((nowC != null ? nowC : fillC) + 273.15) / (fillC + 273.15) - patm(na);   // temperature and altitude
     p = p * Math.pow(1 - leak.pct / 100, days);
-    const tol = Math.max(a.airTolPsi, a.airTolPct * tgt), up = Math.max(5, 0.07 * tgt);
+    const tol = 0.10 * tgt, up = 0.05 * tgt;
     const gap = tgt - p;
     return {
       known: true, estPsi: p, tgt, gap, days, leak, needAir: gap > tol, tooHigh: -gap > up,
@@ -916,7 +916,7 @@ const STABS=[['bike','Bike'],['data','Data'],['log','Log'],['model','Model']];
 function segBar(items,cur,attr){return `<div class="seg" role="tablist">${items.map(([v,l])=>`<button ${attr}="${v}" aria-current="${String(v)===String(cur)}">${l}</button>`).join('')}</div>`}
 function bikeName(){return (S.rider&&S.rider.bikeName)||'My bike'}
 function bikeBar(){return `<div class="bikesel" data-goto="settings:bike" role="button" tabindex="0" aria-label="Bike: ${esc(bikeName())}. Tap to change"><span>${esc(bikeName())}</span><span aria-hidden="true">▾</span></div><p class="mute" style="margin:6px 0 2px">Estimated just now · ${S.rides.length} ride${S.rides.length===1?'':'s'} on file</p>`}
-function airZones(A){const tgt=A.tgt,tol=Math.max(S.a.airTolPsi||3,(S.a.airTolPct||.05)*tgt),over=isFinite(A.lim)?A.lim:tgt+4*tol;return {tgt,tol,low:tgt-tol,good0:tgt-Math.max(2,0.03*tgt),good1:tgt+Math.max(5,0.07*tgt),over:Math.max(over,tgt+Math.max(5,0.07*tgt)+2)}}
+function airZones(A){const tgt=A.tgt,g1=tgt*1.05,over=isFinite(A.lim)?A.lim:tgt*1.25;return {tgt,low:tgt*0.90,good0:tgt*0.95,good1:g1,over:Math.max(over,g1+2)}}
 function tireStatus(t){
   const A=advice(t),ar=A.air,sl=A.sealant,Z=airZones(A),airRed=ar.known&&(ar.needAir||ar.tooHigh),sealRed=!!sl.needAdd,overfilled=ar.known&&ar.estPsi>Z.over;
   const tg=Math.round(ar.tgt*10)/10;

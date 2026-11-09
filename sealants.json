@@ -488,12 +488,13 @@
    "note": "Same amounts as Regular. No separate Endurance figure found."
   },
   {
-   "id": "silca-ultimate",
-   "name": "Silca Ultimate",
+   "id": "silca-ultimate-original",
+   "name": "Silca Ultimate Original",
    "family": "Silca",
-   "formula": "Ultimate",
+   "formula": "Ultimate Original",
    "aliases": [
-    "Silca"
+    "Silca",
+    "Silca Ultimate"
    ],
    "dose": {
     "road": [
@@ -545,7 +546,66 @@
    },
    "src": "secondary",
    "srcUrl": "https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",
-   "note": "90 to 120 ml for gravel (midpoint), quoted by a reviewer. Road and mountain bike use the generic dose."
+   "note": "90 to 120 ml for gravel (midpoint), quoted by a reviewer. Road and mountain bike use the generic dose. Pour it into the tire; this version does not go through the valve core."
+  },
+  {
+   "id": "silca-ultimate-2",
+   "name": "Silca Ultimate 2.0",
+   "family": "Silca",
+   "formula": "Ultimate 2.0",
+   "aliases": [],
+   "dose": {
+    "road": [
+     [
+      28,
+      50
+     ],
+     [
+      32,
+      55
+     ],
+     [
+      40,
+      60
+     ],
+     [
+      45,
+      80
+     ],
+     [
+      50,
+      95
+     ]
+    ],
+    "gravel": [
+     [
+      35,
+      105
+     ],
+     [
+      50,
+      105
+     ]
+    ],
+    "mtb": [
+     [
+      51,
+      95
+     ],
+     [
+      64,
+      125
+     ],
+     [
+      76,
+      140
+     ]
+    ]
+   },
+   "lifeMaxDays": 180,
+   "src": "secondary",
+   "srcUrl": "https://r2-bike.com/SILCA-Ultimate-Tubeless-Sealant-20-65-ml",
+   "note": "Silca has a per-tire size table, but it was not readable here. Same amounts as Original are used. Retention up to 6 months."
   },
   {
    "id": "schwalbe-doc-blue-pro",

@@ -500,53 +500,205 @@
     "road": [
      [
       28,
-      50
-     ],
-     [
-      32,
       55
      ],
      [
-      40,
-      60
+      32,
+      65
      ],
      [
-      45,
+      40,
       80
      ],
      [
+      42,
+      85
+     ],
+     [
+      45,
+      90
+     ],
+     [
       50,
-      95
+      100
      ]
     ],
     "gravel": [
      [
-      35,
-      105
+      28,
+      55
+     ],
+     [
+      32,
+      65
+     ],
+     [
+      40,
+      80
+     ],
+     [
+      42,
+      85
+     ],
+     [
+      45,
+      90
      ],
      [
       50,
-      105
+      100
      ]
     ],
     "mtb": [
      [
       51,
-      95
+      100
      ],
      [
-      64,
+      57,
+      115
+     ],
+     [
+      61,
       125
      ],
      [
-      76,
-      140
+      66,
+      135
      ]
     ]
    },
-   "src": "secondary",
-   "srcUrl": "https://nminus1bikes.substack.com/p/quit-guessing-how-much-tubeless-sealant",
-   "note": "90 to 120 ml for gravel (midpoint), quoted by a reviewer. Road and mountain bike use the generic dose. Pour it into the tire; this version does not go through the valve core."
+   "rep": {
+    "road": [
+     [
+      30,
+      [
+       30,
+       44,
+       59
+      ]
+     ],
+     [
+      45,
+      [
+       44,
+       59,
+       89
+      ]
+     ],
+     [
+      60,
+      [
+       59,
+       89,
+       118
+      ]
+     ],
+     [
+      76,
+      [
+       74,
+       103,
+       148
+      ]
+     ],
+     [
+      999,
+      [
+       89,
+       133,
+       177
+      ]
+     ]
+    ],
+    "gravel": [
+     [
+      30,
+      [
+       30,
+       44,
+       59
+      ]
+     ],
+     [
+      45,
+      [
+       44,
+       59,
+       89
+      ]
+     ],
+     [
+      60,
+      [
+       59,
+       89,
+       118
+      ]
+     ],
+     [
+      76,
+      [
+       74,
+       103,
+       148
+      ]
+     ],
+     [
+      999,
+      [
+       89,
+       133,
+       177
+      ]
+     ]
+    ],
+    "mtb": [
+     [
+      30,
+      [
+       30,
+       44,
+       59
+      ]
+     ],
+     [
+      45,
+      [
+       44,
+       59,
+       89
+      ]
+     ],
+     [
+      56,
+      [
+       59,
+       89,
+       118
+      ]
+     ],
+     [
+      76,
+      [
+       74,
+       103,
+       148
+      ]
+     ],
+     [
+      999,
+      [
+       89,
+       133,
+       177
+      ]
+     ]
+    ]
+   },
+   "src": "maker",
+   "srcUrl": "https://silca.gorgias.help/en-US/how-much-sealant-do-i-use-in-my-tire-1265414",
+   "note": "Silca Ultimate Sealant Fill Guide, by tire size (700c 28 mm 55 ml up to 50 mm 100 ml; 29 in 2.0 to 2.6 100 to 135 ml). Silca Replenisher is used with the Original: amounts come from Silca's Sealant + Replenisher chart. Pour sealant into the tire."
   },
   {
    "id": "silca-ultimate-2",
@@ -558,54 +710,78 @@
     "road": [
      [
       28,
-      50
-     ],
-     [
-      32,
       55
      ],
      [
-      40,
-      60
+      32,
+      65
      ],
      [
-      45,
+      40,
       80
      ],
      [
+      42,
+      85
+     ],
+     [
+      45,
+      90
+     ],
+     [
       50,
-      95
+      100
      ]
     ],
     "gravel": [
      [
-      35,
-      105
+      28,
+      55
+     ],
+     [
+      32,
+      65
+     ],
+     [
+      40,
+      80
+     ],
+     [
+      42,
+      85
+     ],
+     [
+      45,
+      90
      ],
      [
       50,
-      105
+      100
      ]
     ],
     "mtb": [
      [
       51,
-      95
+      100
      ],
      [
-      64,
+      57,
+      115
+     ],
+     [
+      61,
       125
      ],
      [
-      76,
-      140
+      66,
+      135
      ]
     ]
    },
    "lifeMaxDays": 180,
-   "src": "secondary",
-   "srcUrl": "https://r2-bike.com/SILCA-Ultimate-Tubeless-Sealant-20-65-ml",
-   "note": "Silca has a per-tire size table, but it was not readable here. Same amounts as Original are used. Retention up to 6 months."
+   "src": "maker",
+   "srcUrl": "https://silca.gorgias.help/en-US/how-much-sealant-do-i-use-in-my-tire-1265414",
+   "note": "Silca Ultimate Sealant Fill Guide, by tire size. No Replenisher with the 2.0: refill with the original formula. Retention up to 6 months."
   },
   {
    "id": "schwalbe-doc-blue-pro",

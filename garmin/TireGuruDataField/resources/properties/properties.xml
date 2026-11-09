@@ -7,6 +7,7 @@
         <property id="maxPsi" type="float">0.0</property>
         <property id="frontSeal" type="number">0</property>
         <property id="rearSeal" type="number">0</property>
+        <property id="cbMode" type="boolean">false</property>
         <property id="updated" type="number">0</property>
     </properties>
 </resources>

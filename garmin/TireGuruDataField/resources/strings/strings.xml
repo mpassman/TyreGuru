@@ -8,4 +8,5 @@
     <string id="FrontSeal">Front sealant left, %</string>
     <string id="RearSeal">Rear sealant left, %</string>
     <string id="Updated">Numbers updated on (YYYYMMDD)</string>
+    <string id="CbMode">Color-blind colors (blue, orange, yellow, pink)</string>
 </strings>

@@ -207,7 +207,16 @@ class TireGuruField extends WatchUi.DataField {
 
         if (h * 4 >= w * 3) {
             // tall or full-screen field: a Front tire box and a Rear tire box, like the Home screen of the phone app
-            drawBoxes(dc, w, h);
+            try {
+                drawBoxes(dc, w, h);
+            } catch (ex) {
+                // show the error on screen so a problem can be reported
+                var m = ex.getErrorMessage();
+                if (m == null) { m = "ERR"; }
+                dc.setColor(0xE5483B, Graphics.COLOR_BLACK);
+                dc.drawText(w / 2, h / 2, Graphics.FONT_XTINY, m, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+                ex.printStackTrace();
+            }
             if (stale) {
                 dc.setColor(0xF2B21A, Graphics.COLOR_BLACK);
                 dc.drawText(w / 2, h - Graphics.getFontHeight(Graphics.FONT_XTINY) / 2 - 1, Graphics.FONT_XTINY, "! numbers are old, update in Garmin Connect", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);

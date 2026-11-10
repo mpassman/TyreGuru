@@ -295,38 +295,20 @@ class TireGuruField extends WatchUi.DataField {
         var cx1 = bx + 4 + cell / 2;
         var cx2 = bx + 4 + cell + cell / 2;
 
-        // air dial
+        // air dial (same look as the phone app: chrome bezel, thick band, inner BAR scale)
         var dmax = 60.0;
-        var zones = null;
+        var azones = [];
         if (tgt > 0.0) {
-            zones = airZones(tgt);
-            dmax = zones[4];
-        }
-        bezel(dc, cx1, cy, rad);
-        if (zones != null) {
-            band(dc, cx1, cy, rad, 0.0, zones[0], dmax, zoneColor(0));
-            band(dc, cx1, cy, rad, zones[0], zones[1], dmax, zoneColor(1));
-            band(dc, cx1, cy, rad, zones[1], zones[2], dmax, zoneColor(2));
-            band(dc, cx1, cy, rad, zones[2], zones[3], dmax, zoneColor(3));
-            band(dc, cx1, cy, rad, zones[3], dmax, dmax, zoneColor(4));
-            marker(dc, cx1, cy, rad, tgt, dmax);
+            var zz = airZones(tgt);
+            dmax = zz[4];
+            azones = [[0.0, zz[0], zoneColor(0)], [zz[0], zz[1], zoneColor(1)], [zz[1], zz[2], zoneColor(2)], [zz[2], zz[3], zoneColor(3)], [zz[3], dmax, zoneColor(4)]];
         } else {
-            band(dc, cx1, cy, rad, 0.0, dmax, dmax, 0x555555);
+            azones = [[0.0, dmax, 0x555555]];
         }
-        ticks(dc, cx1, cy, rad);
-        scaleNumbers(dc, cx1, cy, rad, dmax);
-        needle(dc, cx1, cy, rad, est, dmax);
-        unitLabel(dc, cx1, cy, rad, "PSI");
+        gauge(dc, cx1, cy, rad, dmax, azones, tgt, est, "PSI", [1.0 / 14.5038, "BAR", [0.5, 1.0, 2.0, 5.0]]);
 
-        // sealant dial
-        bezel(dc, cx2, cy, rad);
-        band(dc, cx2, cy, rad, 0.0, SEAL_LOW, 120.0, zoneColor(0));
-        band(dc, cx2, cy, rad, SEAL_LOW, SEAL_OK, 120.0, zoneColor(1));
-        band(dc, cx2, cy, rad, SEAL_OK, 120.0, 120.0, zoneColor(2));
-        ticks(dc, cx2, cy, rad);
-        scaleNumbers(dc, cx2, cy, rad, 120.0);
-        needle(dc, cx2, cy, rad, seal, 120.0);
-        unitLabel(dc, cx2, cy, rad, "SEAL %");
+        // sealant dial (percent of a full dose)
+        gauge(dc, cx2, cy, rad, 120.0, [[0.0, SEAL_LOW, zoneColor(0)], [SEAL_LOW, SEAL_OK, zoneColor(1)], [SEAL_OK, 120.0, zoneColor(2)]], -1.0, seal, "SEAL %", null);
 
         // readouts under each dial
         var ry = cy + rad + 9;
@@ -369,34 +351,131 @@ class TireGuruField extends WatchUi.DataField {
         dc.drawText(cx, y, f, txt, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
-    function unitLabel(dc, cx, cy, rad, unit) {
+    // One dial in the phone app's style. zones = [[from, to, color], ...]; alt = [multiplier, name, steps] for the inner scale, or null.
+    function gauge(dc, cx, cy, rad, dmax, zones, tgt, v, unit, alt) {
+        var k = rad / 79.0;
+        var r1 = 73.5 * k;
+        var r0 = 47.0 * k;
+        var face = (76.8 * k).toNumber();
+        // chrome bezel and black face
+        dc.setColor(0xD4D7DA, Graphics.COLOR_BLACK);
+        dc.fillCircle(cx, cy, rad);
+        dc.setColor(0x000000, Graphics.COLOR_BLACK);
+        dc.fillCircle(cx, cy, face);
+        dc.setColor(0x8A8D91, Graphics.COLOR_BLACK);
+        dc.setPenWidth(2);
+        dc.drawCircle(cx, cy, face);
+        dc.setPenWidth(1);
+        // colored band
+        var mid = (r0 + r1) / 2.0;
+        var pen = (r1 - r0).toNumber();
+        for (var z = 0; z < zones.size(); z++) {
+            var zn = zones[z];
+            if (zn[1] > zn[0]) {
+                var d0 = SWEEP_START + SWEEP * clampF(zn[0] / dmax);
+                var d1 = SWEEP_START + SWEEP * clampF(zn[1] / dmax);
+                dc.setColor(zn[2], Graphics.COLOR_BLACK);
+                dc.setPenWidth(pen);
+                dc.drawArc(cx, cy, mid.toNumber(), Graphics.ARC_CLOCKWISE, norm(90.0 - d0), norm(90.0 - d1));
+            }
+        }
+        dc.setPenWidth(1);
+        // black ticks on the band edge
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+        for (var i = 0; i <= 12; i++) {
+            var big = (i % 2 == 0);
+            var d = SWEEP_START + SWEEP * i / 12.0;
+            var q0 = polar(cx, cy, r1, d);
+            var q1 = polar(cx, cy, r1 - (big ? 9.0 : 5.0) * k, d);
+            dc.setPenWidth(big ? 3 : 1);
+            dc.drawLine(q0[0].toNumber(), q0[1].toNumber(), q1[0].toNumber(), q1[1].toNumber());
+        }
+        dc.setPenWidth(1);
+        // bold numbers on the band: black with a white outline
+        for (var j = 0; j <= 12; j += 2) {
+            var val = dmax * j / 12.0;
+            var da = SWEEP_START + SWEEP * j / 12.0;
+            var pp = polar(cx, cy, r0 + 11.0 * k, da);
+            outlined(dc, pp[0].toNumber(), pp[1].toNumber(), numStr(val));
+        }
+        // inner scale in the other unit (white)
+        if (alt != null) {
+            var steps = alt[2];
+            var im = dmax * alt[0];
+            var st = steps[steps.size() - 1];
+            for (var s2 = steps.size() - 1; s2 >= 0; s2--) {
+                if (im / steps[s2] <= 6.0) { st = steps[s2]; }
+            }
+            var n = (im / st + 0.000001).toNumber();
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+            for (var u = 0; u <= n; u++) {
+                var uv = u * st;
+                var ua = SWEEP_START + SWEEP * clampF(uv / alt[0] / dmax);
+                var t0 = polar(cx, cy, r0 - 3.0 * k, ua);
+                var t1 = polar(cx, cy, r0 - 8.0 * k, ua);
+                var t2 = polar(cx, cy, r0 - 20.0 * k, ua);
+                dc.setPenWidth(2);
+                dc.drawLine(t0[0].toNumber(), t0[1].toNumber(), t1[0].toNumber(), t1[1].toNumber());
+                dc.setPenWidth(1);
+                dc.drawText(t2[0].toNumber(), t2[1].toNumber(), Graphics.FONT_XTINY, numStr(uv), Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            }
+        }
+        // target marker: white triangle on the outer edge of the band
+        if (tgt > 0.0) {
+            var ta = SWEEP_START + SWEEP * clampF(tgt / dmax);
+            var m0 = polar(cx, cy, r1 - 7.0 * k, ta);
+            var m1 = polar(cx, cy, r1 + 2.5 * k, ta - 3.2);
+            var m2 = polar(cx, cy, r1 + 2.5 * k, ta + 3.2);
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+            dc.fillPolygon([[m0[0].toNumber(), m0[1].toNumber()], [m1[0].toNumber(), m1[1].toNumber()], [m2[0].toNumber(), m2[1].toNumber()]]);
+        }
+        // needle: black outline, white core, short tail
+        var na = SWEEP_START + SWEEP * clampF(v / dmax);
+        var tip = polar(cx, cy, r1 - 2.0 * k, na);
+        var tail = polar(cx, cy, -13.0 * k, na);
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+        dc.setPenWidth(7);
+        dc.drawLine(tail[0].toNumber(), tail[1].toNumber(), tip[0].toNumber(), tip[1].toNumber());
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
-        dc.drawText(cx, cy + (rad * 0.40).toNumber(), Graphics.FONT_XTINY, unit, Graphics.TEXT_JUSTIFY_CENTER);
-    }
-
-    // black numbers on the colored band with a thin white outline, like the phone app's dials
-    function scaleNumbers(dc, cx, cy, rad, dmax) {
-        var pen = rad / 3;
-        if (pen < 4) { pen = 4; }
-        var rr = rad.toFloat() - pen / 2.0;
-        for (var k = 0; k <= 12; k += 2) {
-            var v = dmax * k / 12.0;
-            var d = SWEEP_START + SWEEP * k / 12.0;
-            var p = polar(cx, cy, rr, d);
-            var px = p[0].toNumber();
-            var py = p[1].toNumber();
-            var t = v.toNumber().toString();
-            var j = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(px - 1, py, Graphics.FONT_XTINY, t, j);
-            dc.drawText(px + 1, py, Graphics.FONT_XTINY, t, j);
-            dc.drawText(px, py - 1, Graphics.FONT_XTINY, t, j);
-            dc.drawText(px, py + 1, Graphics.FONT_XTINY, t, j);
-            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(px, py, Graphics.FONT_XTINY, t, j);
+        dc.setPenWidth(4);
+        dc.drawLine(tail[0].toNumber(), tail[1].toNumber(), tip[0].toNumber(), tip[1].toNumber());
+        dc.setPenWidth(1);
+        // chrome hub
+        dc.setColor(0xCFD2D6, Graphics.COLOR_BLACK);
+        dc.fillCircle(cx, cy, (8.5 * k).toNumber());
+        dc.setColor(0x2A2C2F, Graphics.COLOR_BLACK);
+        dc.fillCircle(cx, cy, (5.2 * k).toNumber());
+        // unit labels
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+        dc.drawText(cx, cy + (30.0 * k).toNumber(), Graphics.FONT_XTINY, unit, Graphics.TEXT_JUSTIFY_CENTER);
+        if (alt != null) {
+            dc.setColor(0xA9A49B, Graphics.COLOR_BLACK);
+            dc.drawText(cx, cy + (30.0 * k).toNumber() + Graphics.getFontHeight(Graphics.FONT_XTINY) - 4, Graphics.FONT_XTINY, alt[1], Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
+    function outlined(dc, x, y, t) {
+        var j = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(x - 1, y, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x + 1, y, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x, y - 1, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x, y + 1, Graphics.FONT_XTINY, t, j);
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(x, y, Graphics.FONT_XTINY, t, j);
+    }
+
+    // 60.0 -> "60", 0.5 -> "0.5", 1.25 -> "1.25"
+    function numStr(v) {
+        var s = v.format("%.2f");
+        var n = s.length();
+        while (s.substring(n - 1, n).equals("0")) {
+            n = n - 1;
+            s = s.substring(0, n);
+        }
+        if (s.substring(n - 1, n).equals(".")) { s = s.substring(0, n - 1); }
+        return s;
+    }
 
     function drawTextOnly(dc, w, h) {
         var zf = airZone(fAir, fTgt);

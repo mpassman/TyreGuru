@@ -42,6 +42,7 @@ class TireGuruField extends WatchUi.DataField {
     var dangerSig = 0;        // bit set of the problems already announced; each sounds once
     var wasOptimal = false;
     var started = false;
+    var useStore = false;
 
     function initialize() {
         DataField.initialize();
@@ -115,7 +116,22 @@ class TireGuruField extends WatchUi.DataField {
         }
     }
 
+    // the phone app's numbers (auto sync) win when they are newer than the typed settings
+    function pickSource() {
+        useStore = false;
+        try {
+            var sv = Application.Storage.getValue("updated");
+            var pv = Application.Properties.getValue("updated");
+            if (sv != null) {
+                useStore = (pv == null) || (sv.toNumber() >= pv.toNumber());
+            }
+        } catch (e) {
+            useStore = false;
+        }
+    }
+
     function readAll() {
+        pickSource();
         fAir = readFloat("frontPsi");
         rAir = readFloat("rearPsi");
         fTgt = readFloat("frontTgt");
@@ -741,7 +757,8 @@ class TireGuruField extends WatchUi.DataField {
     function readFloat(id) {
         var v = null;
         try {
-            v = Application.Properties.getValue(id);
+            if (useStore) { v = Application.Storage.getValue(id); }
+            if (v == null) { v = Application.Properties.getValue(id); }
         } catch (e) {
             v = null;
         }

@@ -252,7 +252,7 @@ class TireGuruField extends WatchUi.DataField {
         }
         var cx = x0 + cw / 2;
         var rad = dialRadius(cw, ch);
-        var cy = y0 + 4 + rad;
+        var cy = y0 + dialTop(ch, rad) + rad;
         bezel(dc, cx, cy, rad);
         if (zones != null) {
             band(dc, cx, cy, rad, 0.0, zones[0], dmax, zoneColor(0));
@@ -271,7 +271,7 @@ class TireGuruField extends WatchUi.DataField {
         valueText(dc, cx, cy, rad, ch, y0, txt, zoneColor(z));
         if (z == 4) {
             dc.setColor(zoneColor(4), Graphics.COLOR_BLACK);
-            dc.drawText(cx, cy + rad + 4 + Graphics.getFontHeight(Graphics.FONT_XTINY) + 2, Graphics.FONT_XTINY, "Release air", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, cy + rad + 10 + Graphics.getFontHeight(Graphics.FONT_XTINY) + 2, Graphics.FONT_XTINY, "Release air", Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
@@ -279,7 +279,7 @@ class TireGuruField extends WatchUi.DataField {
         var z = sealZone(pct);
         var cx = x0 + cw / 2;
         var rad = dialRadius(cw, ch);
-        var cy = y0 + 4 + rad;
+        var cy = y0 + dialTop(ch, rad) + rad;
         bezel(dc, cx, cy, rad);
         band(dc, cx, cy, rad, 0.0, SEAL_LOW, 120.0, zoneColor(0));
         band(dc, cx, cy, rad, SEAL_LOW, SEAL_OK, 120.0, zoneColor(1));
@@ -292,10 +292,18 @@ class TireGuruField extends WatchUi.DataField {
 
     function dialRadius(cw, ch) {
         var r = cw / 2 - 9;
-        var byH = (ch - 4 - 2 * Graphics.getFontHeight(Graphics.FONT_XTINY) - 14) / 2;
+        var byH = (ch - 20 - 2 * Graphics.getFontHeight(Graphics.FONT_XTINY) - 14) / 2;
         if (byH < r) { r = byH; }
         if (r < 14) { r = 14; }
         return r;
+    }
+
+    // top padding so the dial and its value line sit centered in the cell (never less than 10, so the ring is not clipped)
+    function dialTop(ch, rad) {
+        var used = 2 * rad + 10 + Graphics.getFontHeight(Graphics.FONT_XTINY) * 2 + 4;
+        var pad = (ch - used) / 2;
+        if (pad < 10) { pad = 10; }
+        return pad;
     }
 
     function norm(a) {
@@ -379,7 +387,7 @@ class TireGuruField extends WatchUi.DataField {
 
     function valueText(dc, cx, cy, rad, ch, y0, txt, color) {
         dc.setColor(color, Graphics.COLOR_BLACK);
-        dc.drawText(cx, cy + rad + 2, Graphics.FONT_XTINY, txt, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, cy + rad + 10, Graphics.FONT_XTINY, txt, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function readFloat(id) {

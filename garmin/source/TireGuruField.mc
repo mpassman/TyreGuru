@@ -142,16 +142,30 @@ class TireGuruField extends WatchUi.DataField {
     // ---- colors: zone 0 low, 1 OK, 2 good, 3 high, 4 overfilled ----
     function zoneColor(z) {
         if (cb) {
-            // color-blind safe palette
-            if (z == 0 || z == 4) { return 0xE8742A; }
+            // color-blind palette, same as the app
+            if (z == 0 || z == 4) { return 0xD55E00; }
             if (z == 1) { return 0xF0E442; }
-            if (z == 2) { return 0x3D9BE0; }
+            if (z == 2) { return 0x0072B2; }
             return 0xCC79A7;
         }
-        if (z == 0 || z == 4) { return 0xE5483B; }
-        if (z == 1) { return 0xF2B21A; }
-        if (z == 2) { return 0x22B14C; }
-        return 0x9B5DE5;
+        if (z == 0 || z == 4) { return 0xE53935; }
+        if (z == 1) { return 0xF2B01E; }
+        if (z == 2) { return 0x25B34F; }
+        return 0x9B59D6;
+    }
+
+    // lighter text colors used for the readouts under the dials, same as the app
+    function textColor(z) {
+        if (cb) {
+            if (z == 0 || z == 4) { return 0xFF9A4D; }
+            if (z == 1) { return 0xF0E442; }
+            if (z == 2) { return 0x56B4E9; }
+            return 0xE29BC2;
+        }
+        if (z == 0 || z == 4) { return 0xFF6B60; }
+        if (z == 1) { return 0xFFD04A; }
+        if (z == 2) { return 0x4CD964; }
+        return 0xB98CF0;
     }
 
     function zoneWord(z) {
@@ -282,7 +296,7 @@ class TireGuruField extends WatchUi.DataField {
         if (tgt > 0.0) { za = airZone(est, tgt); }
         var zs = sealZone(seal);
         var red = (tgt > 0.0 && (za == 0 || za == 4)) || zs == 0;
-        var edge = red ? zoneColor(0) : zoneColor(2);
+        var edge = red ? (cb ? 0xFF8A3D : 0xFF5A4F) : (cb ? 0x56B4E9 : 0x4FD06A);
         var fm = Graphics.getFontHeight(Graphics.FONT_SMALL);
         var fx = Graphics.getFontHeight(Graphics.FONT_XTINY);
 
@@ -335,8 +349,8 @@ class TireGuruField extends WatchUi.DataField {
         var ry = cy + rad + 9;
         var aTxt = readWord(za) + " - " + est.format("%.1f") + " PSI";
         var sTxt = sealText(zs, seal, front ? fAmt : rAmt, front ? fFull : rFull);
-        readout(dc, cx1, ry, cell, aTxt, zoneColor(za));
-        readout(dc, cx2, ry, cell, sTxt, zoneColor(zs));
+        readout(dc, cx1, ry, cell, aTxt, textColor(za));
+        readout(dc, cx2, ry, cell, sTxt, textColor(zs));
         dc.setColor(0xA9A49B, Graphics.COLOR_BLACK);
         var sub = "Target not set";
         if (tgt > 0.0) { sub = "Target " + tgt.format("%.1f") + " PSI"; }
@@ -428,14 +442,14 @@ class TireGuruField extends WatchUi.DataField {
 
     function gFace(dc, cx, cy, rad) {
         var face = (rad * 76.8 / 79.0).toNumber();
-        dc.setColor(0xD4D7DA, Graphics.COLOR_BLACK);
+        dc.setColor(0xC9CCCF, Graphics.COLOR_BLACK);
         dc.fillCircle(cx, cy, rad);
-        dc.setColor(0x000000, Graphics.COLOR_BLACK);
+        dc.setColor(0xFFFFFF, Graphics.COLOR_BLACK);
+        dc.drawCircle(cx, cy, rad - 1);
+        dc.setColor(0x7A7D82, Graphics.COLOR_BLACK);
+        dc.fillCircle(cx, cy, face + 2);
+        dc.setColor(0x050505, Graphics.COLOR_BLACK);
         dc.fillCircle(cx, cy, face);
-        dc.setColor(0x8A8D91, Graphics.COLOR_BLACK);
-        dc.setPenWidth(2);
-        dc.drawCircle(cx, cy, face);
-        dc.setPenWidth(1);
     }
 
     function gBands(dc, cx, cy, k, dmax, zones) {
@@ -467,7 +481,7 @@ class TireGuruField extends WatchUi.DataField {
     }
 
     function gNumbers(dc, cx, cy, k, dmax) {
-        var rr = 58.0 * k;
+        var rr = 53.5 * k;
         for (var j = 0; j <= 12; j += 2) {
             var pp = polar(cx, cy, rr, SWEEP_START + SWEEP * j / 12.0);
             outlined(dc, pp[0].toNumber(), pp[1].toNumber(), numStr(dmax * j / 12.0));
@@ -487,7 +501,7 @@ class TireGuruField extends WatchUi.DataField {
             var ua = SWEEP_START + SWEEP * clampF(u * st / alt[0] / dmax);
             var t0 = polar(cx, cy, 44.0 * k, ua);
             var t1 = polar(cx, cy, 39.0 * k, ua);
-            var t2 = polar(cx, cy, 27.0 * k, ua);
+            var t2 = polar(cx, cy, 30.0 * k, ua);
             dc.setPenWidth(2);
             dc.drawLine(t0[0].toNumber(), t0[1].toNumber(), t1[0].toNumber(), t1[1].toNumber());
             dc.setPenWidth(1);
@@ -502,6 +516,12 @@ class TireGuruField extends WatchUi.DataField {
         var m2 = polar(cx, cy, 76.0 * k, ta + 3.2);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
         dc.fillPolygon([[m0[0].toNumber(), m0[1].toNumber()], [m1[0].toNumber(), m1[1].toNumber()], [m2[0].toNumber(), m2[1].toNumber()]]);
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+        dc.setPenWidth(2);
+        dc.drawLine(m0[0].toNumber(), m0[1].toNumber(), m1[0].toNumber(), m1[1].toNumber());
+        dc.drawLine(m1[0].toNumber(), m1[1].toNumber(), m2[0].toNumber(), m2[1].toNumber());
+        dc.drawLine(m2[0].toNumber(), m2[1].toNumber(), m0[0].toNumber(), m0[1].toNumber());
+        dc.setPenWidth(1);
     }
 
     function gNeedle(dc, cx, cy, k, dmax, v) {
@@ -509,10 +529,10 @@ class TireGuruField extends WatchUi.DataField {
         var tip = polar(cx, cy, 71.5 * k, na);
         var tail = polar(cx, cy, -13.0 * k, na);
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
-        dc.setPenWidth(7);
+        dc.setPenWidth((6.5 * k).toNumber());
         dc.drawLine(tail[0].toNumber(), tail[1].toNumber(), tip[0].toNumber(), tip[1].toNumber());
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
-        dc.setPenWidth(4);
+        dc.setPenWidth((3.4 * k).toNumber());
         dc.drawLine(tail[0].toNumber(), tail[1].toNumber(), tip[0].toNumber(), tip[1].toNumber());
         dc.setPenWidth(1);
     }
@@ -522,7 +542,9 @@ class TireGuruField extends WatchUi.DataField {
         dc.fillCircle(cx, cy, (8.5 * k).toNumber());
         dc.setColor(0x2A2C2F, Graphics.COLOR_BLACK);
         dc.fillCircle(cx, cy, (5.2 * k).toNumber());
-        var uy = cy + (30.0 * k).toNumber();
+        dc.setColor(0xDDDDDD, Graphics.COLOR_BLACK);
+        dc.fillCircle(cx - (1.4 * k).toNumber(), cy - (1.4 * k).toNumber(), (1.4 * k).toNumber() + 1);
+        var uy = cy + (33.0 * k).toNumber();
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
         dc.drawText(cx, uy, Graphics.FONT_XTINY, unit, Graphics.TEXT_JUSTIFY_CENTER);
         if (alt != null) {

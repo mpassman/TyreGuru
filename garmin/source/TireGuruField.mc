@@ -205,6 +205,16 @@ class TireGuruField extends WatchUi.DataField {
             return;
         }
 
+        if (h * 4 >= w * 3) {
+            // tall or full-screen field: a Front tire box and a Rear tire box, like the Home screen of the phone app
+            drawBoxes(dc, w, h);
+            if (stale) {
+                dc.setColor(0xF2B21A, Graphics.COLOR_BLACK);
+                dc.drawText(w / 2, h - Graphics.getFontHeight(Graphics.FONT_XTINY) / 2 - 1, Graphics.FONT_XTINY, "! numbers are old, update in Garmin Connect", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            }
+            return;
+        }
+
         var cols = 4;
         var rows = 1;
         if (h * 4 >= w * 3) {
@@ -232,6 +242,161 @@ class TireGuruField extends WatchUi.DataField {
             dc.drawText(w / 2, h - 2, Graphics.FONT_XTINY, "! numbers are old, update in Garmin Connect", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
     }
+
+    // ---- Home-screen style layout: one box per tire (red or green outline, tag, two dials, readouts, fix line) ----
+    function drawBoxes(dc, w, h) {
+        var gap = 6;
+        var foot = 0;
+        if (stale) { foot = Graphics.getFontHeight(Graphics.FONT_XTINY) + 2; }
+        var bh = (h - foot - gap * 3) / 2;
+        drawBox(dc, 4, gap, w - 8, bh, true);
+        drawBox(dc, 4, gap * 2 + bh, w - 8, bh, false);
+    }
+
+    function drawBox(dc, bx, by, bw, bh, front) {
+        var est = front ? fAir : rAir;
+        var tgt = front ? fTgt : rTgt;
+        var seal = front ? fSeal : rSeal;
+        var za = 2;
+        if (tgt > 0.0) { za = airZone(est, tgt); }
+        var zs = sealZone(seal);
+        var red = (tgt > 0.0 && (za == 0 || za == 4)) || zs == 0;
+        var edge = red ? zoneColor(0) : zoneColor(2);
+        var fm = Graphics.getFontHeight(Graphics.FONT_SMALL);
+        var fx = Graphics.getFontHeight(Graphics.FONT_XTINY);
+
+        // outline and header
+        dc.setColor(edge, Graphics.COLOR_BLACK);
+        dc.setPenWidth(3);
+        dc.drawRoundedRectangle(bx, by, bw, bh, 12);
+        dc.setPenWidth(1);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+        dc.drawText(bx + 12, by + 5, Graphics.FONT_SMALL, front ? "Front tire" : "Rear tire", Graphics.TEXT_JUSTIFY_LEFT);
+        var tag = red ? "RED" : "GREEN";
+        var tw = dc.getTextWidthInPixels(tag, Graphics.FONT_XTINY) + 18;
+        var th = fx + 2;
+        var tx = bx + bw - tw - 10;
+        var ty = by + 5 + (fm - th) / 2;
+        dc.setColor(edge, Graphics.COLOR_BLACK);
+        dc.fillRoundedRectangle(tx, ty, tw, th, 4);
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(tx + tw / 2, ty + th / 2, Graphics.FONT_XTINY, tag, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // dial size from the space left under the header
+        var hh = fm + 12;
+        var fixh = fm + 8;
+        var readh = fm + fx + 10;
+        var cell = (bw - 8) / 2;
+        var rad = cell / 2 - 10;
+        var byH = (bh - hh - fixh - readh - 8) / 2;
+        if (byH < rad) { rad = byH; }
+        if (rad < 20) { rad = 20; }
+        var cy = by + hh + 4 + rad;
+        var cx1 = bx + 4 + cell / 2;
+        var cx2 = bx + 4 + cell + cell / 2;
+
+        // air dial
+        var dmax = 60.0;
+        var zones = null;
+        if (tgt > 0.0) {
+            zones = airZones(tgt);
+            dmax = zones[4];
+        }
+        bezel(dc, cx1, cy, rad);
+        if (zones != null) {
+            band(dc, cx1, cy, rad, 0.0, zones[0], dmax, zoneColor(0));
+            band(dc, cx1, cy, rad, zones[0], zones[1], dmax, zoneColor(1));
+            band(dc, cx1, cy, rad, zones[1], zones[2], dmax, zoneColor(2));
+            band(dc, cx1, cy, rad, zones[2], zones[3], dmax, zoneColor(3));
+            band(dc, cx1, cy, rad, zones[3], dmax, dmax, zoneColor(4));
+            marker(dc, cx1, cy, rad, tgt, dmax);
+        } else {
+            band(dc, cx1, cy, rad, 0.0, dmax, dmax, 0x555555);
+        }
+        ticks(dc, cx1, cy, rad);
+        scaleNumbers(dc, cx1, cy, rad, dmax);
+        needle(dc, cx1, cy, rad, est, dmax);
+        unitLabel(dc, cx1, cy, rad, "PSI");
+
+        // sealant dial
+        bezel(dc, cx2, cy, rad);
+        band(dc, cx2, cy, rad, 0.0, SEAL_LOW, 120.0, zoneColor(0));
+        band(dc, cx2, cy, rad, SEAL_LOW, SEAL_OK, 120.0, zoneColor(1));
+        band(dc, cx2, cy, rad, SEAL_OK, 120.0, 120.0, zoneColor(2));
+        ticks(dc, cx2, cy, rad);
+        scaleNumbers(dc, cx2, cy, rad, 120.0);
+        needle(dc, cx2, cy, rad, seal, 120.0);
+        unitLabel(dc, cx2, cy, rad, "SEAL %");
+
+        // readouts under each dial
+        var ry = cy + rad + 9;
+        var aTxt = readWord(za) + " - " + est.format("%.1f") + " PSI";
+        var sTxt = readWord(zs) + " - " + seal.format("%.0f") + "%";
+        readout(dc, cx1, ry, cell, aTxt, zoneColor(za));
+        readout(dc, cx2, ry, cell, sTxt, zoneColor(zs));
+        dc.setColor(0xA9A49B, Graphics.COLOR_BLACK);
+        var sub = "Target not set";
+        if (tgt > 0.0) { sub = "Target " + tgt.format("%.1f") + " PSI"; }
+        dc.drawText(cx1, ry + fm, Graphics.FONT_XTINY, sub, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx2, ry + fm, Graphics.FONT_XTINY, "of full dose", Graphics.TEXT_JUSTIFY_CENTER);
+
+        // what to do
+        var fix = "";
+        if (tgt > 0.0) {
+            if (za <= 1) { fix = "Add air to " + tgt.format("%.1f") + " PSI"; }
+            else if (za == 3) { fix = "Release a little air"; }
+            else if (za == 4) { fix = "Release air to " + tgt.format("%.1f") + " PSI"; }
+        }
+        if (zs == 0) {
+            if (fix.length() > 0) { fix = fix + ", add sealant"; } else { fix = "Add sealant"; }
+        }
+        if (fix.length() == 0) { fix = "Good"; }
+        dc.setColor(red ? zoneColor(0) : Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+        var fixFont = Graphics.FONT_SMALL;
+        if (dc.getTextWidthInPixels(fix, fixFont) > bw - 16) { fixFont = Graphics.FONT_TINY; }
+        dc.drawText(bx + bw / 2, by + bh - fixh + 2, fixFont, fix, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    function readWord(z) {
+        if (z == 4) { return "Over"; }
+        return zoneWord(z);
+    }
+
+    function readout(dc, cx, y, cell, txt, color) {
+        var f = Graphics.FONT_SMALL;
+        if (dc.getTextWidthInPixels(txt, f) > cell - 4) { f = Graphics.FONT_TINY; }
+        dc.setColor(color, Graphics.COLOR_BLACK);
+        dc.drawText(cx, y, f, txt, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    function unitLabel(dc, cx, cy, rad, unit) {
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+        dc.drawText(cx, cy + (rad * 0.40).toNumber(), Graphics.FONT_XTINY, unit, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // black numbers on the colored band with a thin white outline, like the phone app's dials
+    function scaleNumbers(dc, cx, cy, rad, dmax) {
+        var pen = rad / 3;
+        if (pen < 4) { pen = 4; }
+        var rr = rad.toFloat() - pen / 2.0;
+        for (var k = 0; k <= 12; k += 2) {
+            var v = dmax * k / 12.0;
+            var d = SWEEP_START + SWEEP * k / 12.0;
+            var p = polar(cx, cy, rr, d);
+            var px = p[0].toNumber();
+            var py = p[1].toNumber();
+            var t = v.toNumber().toString();
+            var j = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(px - 1, py, Graphics.FONT_XTINY, t, j);
+            dc.drawText(px + 1, py, Graphics.FONT_XTINY, t, j);
+            dc.drawText(px, py - 1, Graphics.FONT_XTINY, t, j);
+            dc.drawText(px, py + 1, Graphics.FONT_XTINY, t, j);
+            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(px, py, Graphics.FONT_XTINY, t, j);
+        }
+    }
+
 
     function drawTextOnly(dc, w, h) {
         var zf = airZone(fAir, fTgt);

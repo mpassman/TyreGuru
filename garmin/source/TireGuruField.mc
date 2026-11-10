@@ -27,6 +27,11 @@ class TireGuruField extends WatchUi.DataField {
     var rTgt = 0.0;
     var fSeal = 0.0;
     var rSeal = 0.0;
+    var fAmt = 0.0;           // sealant amount left (fl oz or ml, see sealUnit), optional
+    var rAmt = 0.0;
+    var fFull = 0.0;          // full dose for that tire, same unit; 0 = not set (dial then shows percent)
+    var rFull = 0.0;
+    var sealUnit = 0;         // 0 fl oz, 1 ml
     var maxPsi = 0.0;
     var stale = false;
     var cb = false;
@@ -117,6 +122,13 @@ class TireGuruField extends WatchUi.DataField {
         rTgt = readFloat("rearTgt");
         fSeal = readFloat("frontSeal");
         rSeal = readFloat("rearSeal");
+        fAmt = readFloat("frontSealAmt");
+        rAmt = readFloat("rearSealAmt");
+        fFull = readFloat("frontFull");
+        rFull = readFloat("rearFull");
+        sealUnit = readFloat("sealUnit").toNumber();
+        if (fFull > 0.0) { fSeal = fAmt / fFull * 100.0; }
+        if (rFull > 0.0) { rSeal = rAmt / rFull * 100.0; }
         maxPsi = readFloat("maxPsi");
         cb = readFloat("cbMode") > 0.5;
         alarmMode = readFloat("alarmMode").toNumber();
@@ -317,19 +329,19 @@ class TireGuruField extends WatchUi.DataField {
         gauge(dc, cx1, cy, rad, dmax, azones, tgt, est, "PSI", [1.0 / 14.5038, "BAR", [0.5, 1.0, 2.0, 5.0]]);
 
         // sealant dial (percent of a full dose)
-        gauge(dc, cx2, cy, rad, 120.0, [[0.0, SEAL_LOW, zoneColor(0)], [SEAL_LOW, SEAL_OK, zoneColor(1)], [SEAL_OK, 120.0, zoneColor(2)]], -1.0, seal, "SEAL %", null);
+        sealDial(dc, cx2, cy, rad, seal, front ? fAmt : rAmt, front ? fFull : rFull);
 
         // readouts under each dial
         var ry = cy + rad + 9;
         var aTxt = readWord(za) + " - " + est.format("%.1f") + " PSI";
-        var sTxt = readWord(zs) + " - " + seal.format("%.0f") + "%";
+        var sTxt = sealText(zs, seal, front ? fAmt : rAmt, front ? fFull : rFull);
         readout(dc, cx1, ry, cell, aTxt, zoneColor(za));
         readout(dc, cx2, ry, cell, sTxt, zoneColor(zs));
         dc.setColor(0xA9A49B, Graphics.COLOR_BLACK);
         var sub = "Target not set";
         if (tgt > 0.0) { sub = "Target " + tgt.format("%.1f") + " PSI"; }
         dc.drawText(cx1, ry + fm, Graphics.FONT_XTINY, sub, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(cx2, ry + fm, Graphics.FONT_XTINY, "of full dose", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx2, ry + fm, Graphics.FONT_XTINY, sealSub(seal, front ? fFull : rFull), Graphics.TEXT_JUSTIFY_CENTER);
 
         // what to do
         var fix = "";
@@ -346,6 +358,46 @@ class TireGuruField extends WatchUi.DataField {
         var fixFont = Graphics.FONT_SMALL;
         if (dc.getTextWidthInPixels(fix, fixFont) > bw - 16) { fixFont = Graphics.FONT_TINY; }
         dc.drawText(bx + bw / 2, by + bh - fixh + 2, fixFont, fix, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // ---- sealant dial: fl oz or ml when the amount and full dose are set (like the phone app), otherwise percent ----
+    function sealDial(dc, cx, cy, rad, pct, amt, full) {
+        if (full <= 0.0) {
+            gauge(dc, cx, cy, rad, 120.0, [[0.0, SEAL_LOW, zoneColor(0)], [SEAL_LOW, SEAL_OK, zoneColor(1)], [SEAL_OK, 120.0, zoneColor(2)]], -1.0, pct, "SEAL %", null);
+            return;
+        }
+        var steps = [0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 50.0, 100.0];
+        var stp = 100.0;
+        for (var i = steps.size() - 1; i >= 0; i--) {
+            if (steps[i] * 6.0 >= full * 1.2 - 0.000000001) { stp = steps[i]; }
+        }
+        var smax = stp * 6.0;
+        var v = amt;
+        if (v > smax) { v = smax; }
+        var zones = [[0.0, full * 0.4, zoneColor(0)], [full * 0.4, full * 0.9, zoneColor(1)], [full * 0.9, smax, zoneColor(2)]];
+        if (sealUnit == 1) {
+            gauge(dc, cx, cy, rad, smax, zones, -1.0, v, "ML", [1.0 / 29.5735, "FL OZ", [0.5, 1.0, 2.0, 5.0]]);
+        } else {
+            gauge(dc, cx, cy, rad, smax, zones, -1.0, v, "FL OZ", [29.5735, "ML", [10.0, 20.0, 25.0, 50.0, 100.0, 200.0]]);
+        }
+    }
+
+    function unitName() {
+        return (sealUnit == 1) ? "ml" : "fl oz";
+    }
+
+    function amtStr(a) {
+        return (sealUnit == 1) ? a.format("%.0f") : a.format("%.1f");
+    }
+
+    function sealText(zs, pct, amt, full) {
+        if (full > 0.0) { return readWord(zs) + " - " + amtStr(amt) + " " + unitName(); }
+        return readWord(zs) + " - " + pct.format("%.0f") + "%";
+    }
+
+    function sealSub(pct, full) {
+        if (full > 0.0) { return pct.format("%.0f") + "% of full dose (" + amtStr(full) + " " + unitName() + ")"; }
+        return "of full dose";
     }
 
     function readWord(z) {
@@ -482,7 +534,13 @@ class TireGuruField extends WatchUi.DataField {
     function outlined(dc, x, y, t) {
         var j = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(x - 1, y, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x + 1, y, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x, y - 1, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x, y + 1, Graphics.FONT_XTINY, t, j);
         dc.drawText(x - 1, y - 1, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x + 1, y - 1, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x - 1, y + 1, Graphics.FONT_XTINY, t, j);
         dc.drawText(x + 1, y + 1, Graphics.FONT_XTINY, t, j);
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
         dc.drawText(x, y, Graphics.FONT_XTINY, t, j);

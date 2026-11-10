@@ -8,6 +8,11 @@
         <property id="frontSeal" type="number">0</property>
         <property id="rearSeal" type="number">0</property>
         <property id="cbMode" type="boolean">false</property>
+        <property id="sealUnit" type="number">0</property>
+        <property id="frontSealAmt" type="float">0.0</property>
+        <property id="frontFull" type="float">0.0</property>
+        <property id="rearSealAmt" type="float">0.0</property>
+        <property id="rearFull" type="float">0.0</property>
         <property id="updated" type="number">0</property>
         <property id="alarmMode" type="number">0</property>
         <property id="dangerOn" type="boolean">true</property>

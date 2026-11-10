@@ -21,6 +21,24 @@
         <setting propertyKey="@Properties.rearSeal" title="@Strings.RearSeal">
             <settingConfig type="numeric" min="0" max="100" />
         </setting>
+        <setting propertyKey="@Properties.sealUnit" title="@Strings.SealUnit">
+            <settingConfig type="list">
+                <listEntry value="0">@Strings.UnitOz</listEntry>
+                <listEntry value="1">@Strings.UnitMl</listEntry>
+            </settingConfig>
+        </setting>
+        <setting propertyKey="@Properties.frontSealAmt" title="@Strings.FrontSealAmt">
+            <settingConfig type="numeric" min="0" max="500" />
+        </setting>
+        <setting propertyKey="@Properties.frontFull" title="@Strings.FrontFull">
+            <settingConfig type="numeric" min="0" max="500" />
+        </setting>
+        <setting propertyKey="@Properties.rearSealAmt" title="@Strings.RearSealAmt">
+            <settingConfig type="numeric" min="0" max="500" />
+        </setting>
+        <setting propertyKey="@Properties.rearFull" title="@Strings.RearFull">
+            <settingConfig type="numeric" min="0" max="500" />
+        </setting>
         <setting propertyKey="@Properties.updated" title="@Strings.Updated">
             <settingConfig type="numeric" min="0" max="99999999" />
         </setting>

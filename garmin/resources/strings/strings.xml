@@ -7,6 +7,13 @@
     <string id="MaxPsi">Tire maximum PSI (0 = none)</string>
     <string id="FrontSeal">Front sealant left, %</string>
     <string id="RearSeal">Rear sealant left, %</string>
+    <string id="SealUnit">Sealant units</string>
+    <string id="UnitOz">Fluid ounces (fl oz)</string>
+    <string id="UnitMl">Milliliters (ml)</string>
+    <string id="FrontSealAmt">Front sealant left, in those units (optional)</string>
+    <string id="FrontFull">Front full dose, in those units (optional)</string>
+    <string id="RearSealAmt">Rear sealant left, in those units (optional)</string>
+    <string id="RearFull">Rear full dose, in those units (optional)</string>
     <string id="Updated">Numbers updated on (YYYYMMDD)</string>
     <string id="CbMode">Color-blind colors (blue, orange, yellow, pink)</string>
     <string id="AlarmMode">Alert sound on the Edge</string>

@@ -343,7 +343,8 @@ class TireGuruField extends WatchUi.DataField {
         gauge(dc, cx1, cy, rad, dmax, azones, tgt, est, "PSI", [1.0 / 14.5038, "BAR", [0.5, 1.0, 2.0, 5.0]]);
 
         // sealant dial (percent of a full dose)
-        sealDial(dc, cx2, cy, rad, seal, front ? fAmt : rAmt, front ? fFull : rFull);
+        var sp = sealParams(seal, front ? fAmt : rAmt, front ? fFull : rFull);
+        gauge(dc, cx2, cy, rad, sp[0], sp[1], -1.0, sp[2], sp[3], sp[4]);
 
         // readouts under each dial
         var ry = cy + rad + 9;
@@ -375,10 +376,9 @@ class TireGuruField extends WatchUi.DataField {
     }
 
     // ---- sealant dial: fl oz or ml when the amount and full dose are set (like the phone app), otherwise percent ----
-    function sealDial(dc, cx, cy, rad, pct, amt, full) {
+    function sealParams(pct, amt, full) {
         if (full <= 0.0) {
-            gauge(dc, cx, cy, rad, 120.0, [[0.0, SEAL_LOW, zoneColor(0)], [SEAL_LOW, SEAL_OK, zoneColor(1)], [SEAL_OK, 120.0, zoneColor(2)]], -1.0, pct, "SEAL %", null);
-            return;
+            return [120.0, [[0.0, SEAL_LOW, zoneColor(0)], [SEAL_LOW, SEAL_OK, zoneColor(1)], [SEAL_OK, 120.0, zoneColor(2)]], pct, "SEAL %", null];
         }
         var steps = [0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 50.0, 100.0];
         var stp = 100.0;
@@ -390,10 +390,9 @@ class TireGuruField extends WatchUi.DataField {
         if (v > smax) { v = smax; }
         var zones = [[0.0, full * 0.4, zoneColor(0)], [full * 0.4, full * 0.9, zoneColor(1)], [full * 0.9, smax, zoneColor(2)]];
         if (sealUnit == 1) {
-            gauge(dc, cx, cy, rad, smax, zones, -1.0, v, "ML", [1.0 / 29.5735, "FL OZ", [0.5, 1.0, 2.0, 5.0]]);
-        } else {
-            gauge(dc, cx, cy, rad, smax, zones, -1.0, v, "FL OZ", [29.5735, "ML", [10.0, 20.0, 25.0, 50.0, 100.0, 200.0]]);
+            return [smax, zones, v, "ML", [1.0 / 29.5735, "FL OZ", [0.5, 1.0, 2.0, 5.0]]];
         }
+        return [smax, zones, v, "FL OZ", [29.5735, "ML", [10.0, 20.0, 25.0, 50.0, 100.0, 200.0]]];
     }
 
     function unitName() {
@@ -553,19 +552,21 @@ class TireGuruField extends WatchUi.DataField {
         }
     }
 
+    // bold number with a strong white outline, like the app's numbers on the colored band
     function outlined(dc, x, y, t) {
         var j = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
+        var f = Graphics.FONT_TINY;
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(x - 1, y, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x + 1, y, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x, y - 1, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x, y + 1, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x - 1, y - 1, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x + 1, y - 1, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x - 1, y + 1, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x + 1, y + 1, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x - 2, y, f, t, j);
+        dc.drawText(x + 2, y, f, t, j);
+        dc.drawText(x, y - 2, f, t, j);
+        dc.drawText(x, y + 2, f, t, j);
+        dc.drawText(x - 2, y - 2, f, t, j);
+        dc.drawText(x + 2, y - 2, f, t, j);
+        dc.drawText(x - 2, y + 2, f, t, j);
+        dc.drawText(x + 2, y + 2, f, t, j);
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(x, y, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x, y, f, t, j);
     }
 
     // 60.0 -> "60", 0.5 -> "0.5", 1.25 -> "1.25"

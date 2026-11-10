@@ -360,13 +360,22 @@ class TireGuruField extends WatchUi.DataField {
         dc.drawText(cx, y, f, txt, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
-    // One dial in the phone app's style. zones = [[from, to, color], ...]; alt = [multiplier, name, steps] for the inner scale, or null.
+    // One dial in the phone app's style, split into small functions (the Edge call stack is small).
+    // zones = [[from, to, color], ...]; alt = [multiplier, name, steps] for the inner scale, or null.
     function gauge(dc, cx, cy, rad, dmax, zones, tgt, v, unit, alt) {
         var k = rad / 79.0;
-        var r1 = 73.5 * k;
-        var r0 = 47.0 * k;
-        var face = (76.8 * k).toNumber();
-        // chrome bezel and black face
+        gFace(dc, cx, cy, rad);
+        gBands(dc, cx, cy, k, dmax, zones);
+        gTicks(dc, cx, cy, k);
+        gNumbers(dc, cx, cy, k, dmax);
+        if (alt != null) { gInner(dc, cx, cy, k, dmax, alt); }
+        if (tgt > 0.0) { gTarget(dc, cx, cy, k, dmax, tgt); }
+        gNeedle(dc, cx, cy, k, dmax, v);
+        gHub(dc, cx, cy, k, unit, alt);
+    }
+
+    function gFace(dc, cx, cy, rad) {
+        var face = (rad * 76.8 / 79.0).toNumber();
         dc.setColor(0xD4D7DA, Graphics.COLOR_BLACK);
         dc.fillCircle(cx, cy, rad);
         dc.setColor(0x000000, Graphics.COLOR_BLACK);
@@ -375,21 +384,24 @@ class TireGuruField extends WatchUi.DataField {
         dc.setPenWidth(2);
         dc.drawCircle(cx, cy, face);
         dc.setPenWidth(1);
-        // colored band
-        var mid = (r0 + r1) / 2.0;
-        var pen = (r1 - r0).toNumber();
+    }
+
+    function gBands(dc, cx, cy, k, dmax, zones) {
+        var mid = (73.5 + 47.0) / 2.0 * k;
+        var pen = (26.5 * k).toNumber();
         for (var z = 0; z < zones.size(); z++) {
             var zn = zones[z];
             if (zn[1] > zn[0]) {
-                var d0 = SWEEP_START + SWEEP * clampF(zn[0] / dmax);
-                var d1 = SWEEP_START + SWEEP * clampF(zn[1] / dmax);
                 dc.setColor(zn[2], Graphics.COLOR_BLACK);
                 dc.setPenWidth(pen);
-                dc.drawArc(cx, cy, mid.toNumber(), Graphics.ARC_CLOCKWISE, norm(90.0 - d0), norm(90.0 - d1));
+                dc.drawArc(cx, cy, mid.toNumber(), Graphics.ARC_CLOCKWISE, norm(90.0 - (SWEEP_START + SWEEP * clampF(zn[0] / dmax))), norm(90.0 - (SWEEP_START + SWEEP * clampF(zn[1] / dmax))));
             }
         }
         dc.setPenWidth(1);
-        // black ticks on the band edge
+    }
+
+    function gTicks(dc, cx, cy, k) {
+        var r1 = 73.5 * k;
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         for (var i = 0; i <= 12; i++) {
             var big = (i % 2 == 0);
@@ -400,47 +412,49 @@ class TireGuruField extends WatchUi.DataField {
             dc.drawLine(q0[0].toNumber(), q0[1].toNumber(), q1[0].toNumber(), q1[1].toNumber());
         }
         dc.setPenWidth(1);
-        // bold numbers on the band: black with a white outline
+    }
+
+    function gNumbers(dc, cx, cy, k, dmax) {
+        var rr = 58.0 * k;
         for (var j = 0; j <= 12; j += 2) {
-            var val = dmax * j / 12.0;
-            var da = SWEEP_START + SWEEP * j / 12.0;
-            var pp = polar(cx, cy, r0 + 11.0 * k, da);
-            outlined(dc, pp[0].toNumber(), pp[1].toNumber(), numStr(val));
+            var pp = polar(cx, cy, rr, SWEEP_START + SWEEP * j / 12.0);
+            outlined(dc, pp[0].toNumber(), pp[1].toNumber(), numStr(dmax * j / 12.0));
         }
-        // inner scale in the other unit (white)
-        if (alt != null) {
-            var steps = alt[2];
-            var im = dmax * alt[0];
-            var st = steps[steps.size() - 1];
-            for (var s2 = steps.size() - 1; s2 >= 0; s2--) {
-                if (im / steps[s2] <= 6.0) { st = steps[s2]; }
-            }
-            var n = (im / st + 0.000001).toNumber();
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
-            for (var u = 0; u <= n; u++) {
-                var uv = u * st;
-                var ua = SWEEP_START + SWEEP * clampF(uv / alt[0] / dmax);
-                var t0 = polar(cx, cy, r0 - 3.0 * k, ua);
-                var t1 = polar(cx, cy, r0 - 8.0 * k, ua);
-                var t2 = polar(cx, cy, r0 - 20.0 * k, ua);
-                dc.setPenWidth(2);
-                dc.drawLine(t0[0].toNumber(), t0[1].toNumber(), t1[0].toNumber(), t1[1].toNumber());
-                dc.setPenWidth(1);
-                dc.drawText(t2[0].toNumber(), t2[1].toNumber(), Graphics.FONT_XTINY, numStr(uv), Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-            }
+    }
+
+    function gInner(dc, cx, cy, k, dmax, alt) {
+        var steps = alt[2];
+        var im = dmax * alt[0];
+        var st = steps[steps.size() - 1];
+        for (var s2 = steps.size() - 1; s2 >= 0; s2--) {
+            if (im / steps[s2] <= 6.0) { st = steps[s2]; }
         }
-        // target marker: white triangle on the outer edge of the band
-        if (tgt > 0.0) {
-            var ta = SWEEP_START + SWEEP * clampF(tgt / dmax);
-            var m0 = polar(cx, cy, r1 - 7.0 * k, ta);
-            var m1 = polar(cx, cy, r1 + 2.5 * k, ta - 3.2);
-            var m2 = polar(cx, cy, r1 + 2.5 * k, ta + 3.2);
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
-            dc.fillPolygon([[m0[0].toNumber(), m0[1].toNumber()], [m1[0].toNumber(), m1[1].toNumber()], [m2[0].toNumber(), m2[1].toNumber()]]);
+        var n = (im / st + 0.000001).toNumber();
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+        for (var u = 0; u <= n; u++) {
+            var ua = SWEEP_START + SWEEP * clampF(u * st / alt[0] / dmax);
+            var t0 = polar(cx, cy, 44.0 * k, ua);
+            var t1 = polar(cx, cy, 39.0 * k, ua);
+            var t2 = polar(cx, cy, 27.0 * k, ua);
+            dc.setPenWidth(2);
+            dc.drawLine(t0[0].toNumber(), t0[1].toNumber(), t1[0].toNumber(), t1[1].toNumber());
+            dc.setPenWidth(1);
+            dc.drawText(t2[0].toNumber(), t2[1].toNumber(), Graphics.FONT_XTINY, numStr(u * st), Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
-        // needle: black outline, white core, short tail
+    }
+
+    function gTarget(dc, cx, cy, k, dmax, tgt) {
+        var ta = SWEEP_START + SWEEP * clampF(tgt / dmax);
+        var m0 = polar(cx, cy, 66.5 * k, ta);
+        var m1 = polar(cx, cy, 76.0 * k, ta - 3.2);
+        var m2 = polar(cx, cy, 76.0 * k, ta + 3.2);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+        dc.fillPolygon([[m0[0].toNumber(), m0[1].toNumber()], [m1[0].toNumber(), m1[1].toNumber()], [m2[0].toNumber(), m2[1].toNumber()]]);
+    }
+
+    function gNeedle(dc, cx, cy, k, dmax, v) {
         var na = SWEEP_START + SWEEP * clampF(v / dmax);
-        var tip = polar(cx, cy, r1 - 2.0 * k, na);
+        var tip = polar(cx, cy, 71.5 * k, na);
         var tail = polar(cx, cy, -13.0 * k, na);
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.setPenWidth(7);
@@ -449,27 +463,27 @@ class TireGuruField extends WatchUi.DataField {
         dc.setPenWidth(4);
         dc.drawLine(tail[0].toNumber(), tail[1].toNumber(), tip[0].toNumber(), tip[1].toNumber());
         dc.setPenWidth(1);
-        // chrome hub
+    }
+
+    function gHub(dc, cx, cy, k, unit, alt) {
         dc.setColor(0xCFD2D6, Graphics.COLOR_BLACK);
         dc.fillCircle(cx, cy, (8.5 * k).toNumber());
         dc.setColor(0x2A2C2F, Graphics.COLOR_BLACK);
         dc.fillCircle(cx, cy, (5.2 * k).toNumber());
-        // unit labels
+        var uy = cy + (30.0 * k).toNumber();
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
-        dc.drawText(cx, cy + (30.0 * k).toNumber(), Graphics.FONT_XTINY, unit, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, uy, Graphics.FONT_XTINY, unit, Graphics.TEXT_JUSTIFY_CENTER);
         if (alt != null) {
             dc.setColor(0xA9A49B, Graphics.COLOR_BLACK);
-            dc.drawText(cx, cy + (30.0 * k).toNumber() + Graphics.getFontHeight(Graphics.FONT_XTINY) - 4, Graphics.FONT_XTINY, alt[1], Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, uy + Graphics.getFontHeight(Graphics.FONT_XTINY) - 4, Graphics.FONT_XTINY, alt[1], Graphics.TEXT_JUSTIFY_CENTER);
         }
     }
 
     function outlined(dc, x, y, t) {
         var j = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(x - 1, y, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x + 1, y, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x, y - 1, Graphics.FONT_XTINY, t, j);
-        dc.drawText(x, y + 1, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x - 1, y - 1, Graphics.FONT_XTINY, t, j);
+        dc.drawText(x + 1, y + 1, Graphics.FONT_XTINY, t, j);
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
         dc.drawText(x, y, Graphics.FONT_XTINY, t, j);
     }

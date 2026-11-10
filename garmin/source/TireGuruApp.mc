@@ -18,7 +18,7 @@ class TireGuruApp extends Application.AppBase {
         }
     }
 
-    function onPhone(msg) {
+    function onPhone(msg as Communications.PhoneAppMessage) as Void {
         var d = msg.data;
         if (d instanceof Lang.Dictionary) {
             var keys = d.keys();

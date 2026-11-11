@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-11 A3';
+const BUILD='2026-11-11 A4';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -1296,8 +1296,9 @@ function viewDetail(i){
   const why=ar.known?`${ar.days.toFixed(0)} days since the last fill, leaking about ${ar.leak.pct.toFixed(1)}% a day${rideC()!=null?', ride temperature '+Math.round(tF(rideC()))+' '+tU():''}.`:'No air fill is logged yet. Log a fill or a gauge reading.';
   const used=S.tires.map(q=>q.sealant.brand).filter(Boolean),bm=bmList(),pick=bm.find(b=>used.some(u=>TG.sealantFamily(u)===TG.sealantFamily(b[0])))||bm[0];
   const maxTxt=isFinite(A.lim)?`${A.lim} PSI for this tire (${A.limWhy})`:'the lowest maximum marked on your tire or rim';
-  return `<p style="margin:0 0 4px"><button class="ghost" data-act="back">‹ Back</button></p><h2>${nm} tire</h2>
+  return `<p style="margin:0 0 4px"><button class="ghost" data-act="back">‹ Back</button></p><h2>${nm} Tire: ${esc((t.brand+' '+(t.model||'')).trim())} ${t.widthMm} mm</h2>
   <div class="card big ${x.red?'red':'green'}" style="display:flex;gap:10px;align-items:center"><span class="tag ${x.red?'red':'green'}">${x.red?'RED':'GREEN'}</span><b>${what}</b></div>
+  <div class="sboxes">${(()=>{const w=wear(t),left=Math.max(0,w.life-w.km);return sbox('Miles since install',dR(w.km)+' '+dU(),false)+sbox('Miles left',dR(left)+' '+dU(),left<=50*1.609344)})()}</div>
   <div class="card big"><div class="fix" style="margin:0">${x.fix}</div></div>
   <div class="sboxes">${sbox('Now (estimate)',ar.known?(Math.round(ar.estPsi*10)/10)+' PSI':'unknown',x.airRed)}${sbox('Target',A.tgt+' PSI',false)}</div>
   <p class="mute">Why: ${why}</p>

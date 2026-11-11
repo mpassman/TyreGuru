@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-11 xw9';
+const BUILD='2026-11-11 xw10';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -894,7 +894,7 @@ async function xwQuery(idStr){const x=xwc();
   if(!per.length){const e=new Error('nodata');e.nodata=true;e.raw=String(r.text||'').replace(/client_(id|secret)=[^&"\s]*/g,'').replace(/\s+/g,' ').slice(0,200);throw e}
   const nowS=Date.now()+15*60e3;let cur=per[0];per.forEach(q=>{if(q.timestamp*1000<=nowS&&q.roadSurface&&q.roadSurface.tempC!=null)cur=q});
   if(!cur.roadSurface||cur.roadSurface.tempC==null)throw new Error('Xweather returned no road temperature for this spot.');
-  return {tempC:cur.roadSurface.tempC,cond:cur.roadSurface.condition||'',road:(rp.road&&rp.road.name)||'',periodMs:cur.timestamp*1000,ms:Date.now()}}
+  return {tempC:cur.roadSurface.tempC,cond:cur.roadSurface.condition||'',road:(rp.road&&rp.road.name)||'',periodMs:cur.timestamp*1000,ms:Date.now(),at:(rp.loc&&rp.loc.lat!=null)?{lat:+rp.loc.lat,lon:+(rp.loc.long!=null?rp.loc.long:rp.loc.lon)}:null}}
 /* Xweather only answers for points near roads in its network. If the saved location is not near one, try a ring of points about 1 km out (one request at a time, stop at the first hit) and remember the spot that worked so later checks cost one request. */
 async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Error('Add your Xweather client ID and secret first.');
   const near=(p)=>p&&Math.abs(p.lat-loc.lat)<0.02&&Math.abs(p.lon-loc.lon)<0.02;
@@ -902,7 +902,9 @@ async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Err
   const pts=[];if(near(x.snap))pts.push(x.snap);pts.push({lat:loc.lat,lon:loc.lon});
   const dk=0.009,dl=0.009/Math.max(0.2,Math.cos(loc.lat*Math.PI/180));
   [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(d=>pts.push({lat:loc.lat+d[0]*dk,lon:loc.lon+d[1]*dl}));
-  let tried=0;const pl=(x.place||'').trim();if(pl){tried++;try{const q=await xwQuery(pl);x.noRoad=null;return q}catch(e){if(!e.nodata)throw e}}
+  let tried=0;const pl=(x.place||'').trim();const kmTo=(a,b)=>Math.hypot((a.lat-b.lat)*111,(a.lon-b.lon)*111*Math.cos(a.lat*Math.PI/180));
+  /* the typed address only applies while you are within about 15 km of where it was found; farther away, the app uses where you are now */
+  if(pl&&!(x.placeAt&&kmTo(loc,x.placeAt)>15)){tried++;try{const q=await xwQuery(pl);x.noRoad=null;if(q.at&&q.at.lat&&q.at.lon){x.placeAt=q.at;save()}return q}catch(e){if(!e.nodata)throw e}}
   for(const p of pts){tried++;try{const q=await xwQuery((Math.round(p.lat*10000)/10000)+','+(Math.round(p.lon*10000)/10000));if(!near(x.snap)||x.snap.lat!==p.lat||x.snap.lon!==p.lon){x.snap={lat:p.lat,lon:p.lon};save()}x.noRoad=null;return q}catch(e){if(!e.nodata)throw e}}
   if(x.snap)x.snap=null;const msg='Xweather has no road data within about 1 km of your saved location ('+tried+' spots tried). Set your location to a spot on a main road you ride, in Location and weather above, then check again. The app waits 30 minutes before trying again.';x.noRoad={lat:loc.lat,lon:loc.lon,ms:Date.now(),msg};save();
   throw new Error(msg)}
@@ -1658,7 +1660,7 @@ document.addEventListener('focusin',ev=>{const e=ev.target;if(e&&e.tagName==='IN
 document.addEventListener('input',ev=>{
   const e=ev.target;
   if(e&&e.dataset&&(e.dataset.aiu||e.dataset.aic)){const x=aiS();if(e.dataset.aiu)x.url=e.value.trim();else x.code=e.value.trim();save();flushSubs();const bt=document.querySelector('[data-act=aitest]');if(bt)bt.disabled=!aiUrl();return}
-  if(e&&e.dataset&&e.dataset.xw){xwc()[e.dataset.xw]=e.value.trim();xwc().noRoad=null;save();const bx=document.querySelector('[data-act=xwnow]');if(bx)bx.disabled=!(xwc().id&&xwc().secret&&S.home);return}
+  if(e&&e.dataset&&e.dataset.xw){xwc()[e.dataset.xw]=e.value.trim();xwc().noRoad=null;if(e.dataset.xw==='place')xwc().placeAt=null;save();const bx=document.querySelector('[data-act=xwnow]');if(bx)bx.disabled=!(xwc().id&&xwc().secret&&S.home);return}
   if(e&&e.dataset&&e.dataset.tk){trf().key=e.value.trim();save();const bt=document.querySelector('[data-act=trafficnow]');if(bt)bt.disabled=!(trf().key&&S.home);return}
   if(e&&e.dataset&&e.dataset.pml!==undefined){const d=pdraft(+e.dataset.pml),x=parseFloat(e.value);d.ml=isNaN(x)?null:vIn(x);return}
   /* brand field: typing a space finishes the word from the brand list ("P" + space becomes "Pirelli ") */

@@ -162,14 +162,8 @@ class TireGuruField extends WatchUi.DataField {
         chirpOn = readFloat("chirpOn") > 0.5;
         known = readFloat("updated") > 0.0;
         staleRide = readFloat("staleRide") > 0.5;
-        try {
-            var rt = Application.Storage.getValue("roadT");
-            roadT = (rt != null) ? rt.toNumber() : -999;
-            var ru = Application.Storage.getValue("roadU");
-            roadU = (ru != null) ? ru.toNumber() : 0;
-        } catch (e3) {
-            roadT = -999;
-        }
+        roadT = readFloat("roadT").toNumber();   // phone app's Xweather reading, or the property default -999 = none
+        roadU = readFloat("roadU").toNumber();
         var age = ageDays(readFloat("updated").toNumber());
         stale = (age < 0 || age > STALE_DAYS);
     }

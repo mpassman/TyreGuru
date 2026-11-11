@@ -14,8 +14,11 @@
         <property id="rearSealAmt" type="float">0.0</property>
         <property id="rearFull" type="float">0.0</property>
         <property id="updated" type="number">0</property>
+        <property id="staleRide" type="number">0</property>
         <property id="alarmMode" type="number">0</property>
         <property id="dangerOn" type="boolean">true</property>
         <property id="chirpOn" type="boolean">true</property>
-    </properties>
+            <property id="roadT" type="number">-999</property>
+        <property id="roadU" type="number">0</property>
+</properties>
 </resources>

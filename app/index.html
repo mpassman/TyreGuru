@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-11 A4';
+const BUILD='2026-11-11 A5';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -1250,9 +1250,8 @@ function sumCard(t){
   const old=x.st.stale&&!x.red;   // red stays strong; only green and yellow are softened when the reading is out of date
   return `<div class="card big ${x.red?'red':'green'}${old?' stale':''}"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${nm} tire</h2><span class="tag ${old?'grey':(x.red?'red':'green')}">${old?'? OLD READING':(x.red?'✕ RED':'✓ GREEN')}</span></div>
   ${x.st.stale?`<p class="stalenote" role="status"><b>Last reading was before your last ride (${fmtD(x.st.rideMs)}).</b> Check pressure and look for signs of punctures and sealant leaks before you ride, then log what you find.</p>`:''}
-  ${gaugeRow(t,x,L,{air:`<div class="gin"><label for="ha${i}">Air measured, PSI</label><input id="ha${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" value="" placeholder="e.g. 42.6"></div>`,seal:`<div class="gin"><label for="hs${i}">Sealant checked</label><select id="hs${i}"><option value="">Not checked</option><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div>`})}<div style="margin:6px 0"><label for="hd${i}">Muc-Off dipstick, notches wet (optional)</label><input id="hd${i}" type="number" inputmode="numeric" step="1" min="0" max="99" autocomplete="off" placeholder="${dipBase(t)?'e.g. '+Math.max(0,dipBase(t).baseNotch-2):'set the baseline in Details first'}"></div>${patternsOn()?'<p class="mute" style="margin:0;font-size:11px;text-align:center">Stripes = low · dots = OK · solid = good · grid = too high · cross-hatch red = overfilled</p>':''}
+  ${gaugeRow(t,x,L,{air:`<div class="gin"><label for="ha${i}">Air measured, PSI</label><input id="ha${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" value="" placeholder="e.g. 42.6"></div>`,seal:`<div class="gin"><label for="hs${i}">Sealant checked</label><select id="hs${i}"><option value="">Not checked</option><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div>`})}${patternsOn()?'<p class="mute" style="margin:0;font-size:11px;text-align:center">Stripes = low · dots = OK · solid = good · grid = too high · cross-hatch red = overfilled</p>':''}
   <p class="fix" style="${(x.ar.known&&!x.ar.needAir&&x.airRed)?'color:var(--red)':''}">${x.red?x.fix:(old?'Check before you ride':(x.ar.known?'Good':'Log an air fill to start'))}</p>
-  ${airZoneLine(x)}
   ${newTireNote(t)}
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button data-act="homesave" data-i="${i}">Save readings</button><button class="ghost" data-open="${i}">Details ›</button></div><p class="mute" id="hm${i}" aria-live="polite" style="margin:6px 0 0">${esc(msg['h'+i]||'')}</p></div>`;
 }

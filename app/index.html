@@ -786,7 +786,7 @@ function viewHome(){
   if(detail!==null&&S.tires[detail])return viewDetail(detail);
   const ex=S.example?`<div class="ex"><b>Example data.</b> These numbers use a made-up bike and rides so you can see how it works. Open Settings to enter your bike and import rides. <button class="ghost" data-act="clearex" style="margin-left:6px;padding:3px 8px">Remove example</button></div>`:'';
   const cond=`<div class="card"><h3 style="margin-top:0">Riding conditions</h3><div class="row"><div><label for="nowC">Air temperature for the ride, ${tU()}</label><input id="nowC" type="number" step="1" value="${now.airC!=null?Math.round(tF(now.airC)):(S.nowC!==''&&S.nowC!=null?Math.round(tF(+S.nowC)):'')}" placeholder="optional"></div><div style="align-self:end"><button data-act="nowwx">Get current weather</button></div></div>
-  ${now.airC!=null?`<p class="mute" style="margin:6px 0 0">Air ${tF(now.airC).toFixed(0)} ${tU()} · estimated road surface ${tF(now.roadC).toFixed(0)} ${tU()} · elevation ${now.elevation!=null?Math.round(eI(now.elevation))+' '+eU():'unknown'}${trafficLine()}</p>`:''}<p class="mute" style="margin:6px 0 0">${esc(msg.now||'')}</p></div>`;
+  ${now.airC!=null?`<p class="mute" style="margin:6px 0 0">Air ${tF(now.airC).toFixed(0)} ${tU()} · ${now.xweather&&!now.xweather.err?'road surface (Xweather)':'estimated road surface'} ${tF(now.roadC).toFixed(0)} ${tU()} · elevation ${now.elevation!=null?Math.round(eI(now.elevation))+' '+eU():'unknown'}${trafficLine()}</p>`:''}<p class="mute" style="margin:6px 0 0">${esc(msg.now||'')}</p></div>`;
   const ai=`<div class="card"><h3 style="margin-top:0">AI check</h3><p class="mute" style="margin:0 0 8px">Claude reviews the numbers above together with your rides and logs, and says what it would do and why. The red and green decisions above always come from the calculation, so the app still works without AI.</p><button data-act="ai" ${aiBusy?'disabled':''}>${aiBusy?'Thinking…':'Ask the AI to review'}</button>${aiOut?`<div style="margin-top:10px">${aiOut}</div>`:''}</div>`;
   return bikeBar()+alertBanner()+ex+S.tires.map(sumCard).join('')+cond+ai+`<p class="mute">Estimates only. Look and feel for sealant at least once a season, and check pressure with a gauge before rides that matter. Safety comes first.</p>`;
 }
@@ -849,7 +849,7 @@ function garminPayload(){
   const F=get(f),R=get(r),d=new Date(),ymd=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   return {frontPsi:F.psi,frontTgt:F.tgt,rearPsi:R.psi,rearTgt:R.tgt,maxPsi:isFinite(F.x.A.lim)?Math.round(F.x.A.lim*10)/10:0,
     frontSeal:F.pct,rearSeal:R.pct,sealUnit:us?0:1,frontSealAmt:conv(F.left),frontFull:conv(F.full),rearSealAmt:conv(R.left),rearFull:conv(R.full),
-    updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
+    updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,roadT:(now&&now.xweather&&!now.xweather.err&&Date.now()-now.xweather.ms<90*60e3)?Math.round(tF(now.xweather.tempC)):-999,roadU:us?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
 }
 let _garminLast='';
 function garminHandler(){try{return window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.garmin||null}catch(e){return null}}
@@ -881,6 +881,18 @@ function aiServiceCard(){const x=aiS(),m=msg.aisvc||'';
   <p class="mute" id="aimsg" aria-live="polite" style="margin:8px 0 0">${esc(m)}</p>
   <p class="mute" style="margin:6px 0 0">Your address and code stay on this device and are left out of backups. When you press Ask the AI, the review text (your tires, sealant and air estimates and recent ride summaries from your own files) is sent to the service and on to Anthropic. Nothing from Strava or other connected services is ever included.</p></div>`}
 const trf=()=>{S.traffic=S.traffic||{key:'',on:false};return S.traffic};
+/* Xweather Road Weather Conditions: a modeled road surface temperature for the road nearest your saved location, refreshed about every 15 minutes for the next 2 hours. Optional; when it works it replaces the app's own road estimate for "now". */
+const xwc=()=>{S.xw=S.xw||{id:'',secret:'',on:false};return S.xw};
+async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Error('Add your Xweather client ID and secret first.');
+  const url='https://data.api.xweather.com/roadweather/conditions/'+(Math.round(loc.lat*10000)/10000)+','+(Math.round(loc.lon*10000)/10000)+'?client_id='+encodeURIComponent(x.id)+'&client_secret='+encodeURIComponent(x.secret);
+  const r=await net(url);let j=null;try{j=JSON.parse(r.text)}catch(e){}
+  if(r.status===401||r.status===403||(j&&j.error&&/invalid_client|unauthorized|forbidden|usage/i.test(String(j.error.code||''))))throw new Error('Xweather did not accept that ID and secret'+(j&&j.error&&j.error.description?' ('+j.error.description+')':'')+'.');
+  if(r.status===429)throw new Error('Xweather says too many requests. Try again later.');
+  if(!j||!j.success)throw new Error('Xweather: '+((j&&j.error&&(j.error.description||j.error.code))||('error '+r.status))+'.');
+  const rp=(j.response||[])[0],per=rp&&rp.periods||[];if(!per.length)throw new Error('No road data came back for this spot (coverage is North America, Europe, Japan, Australia and New Zealand).');
+  const nowS=Date.now()+15*60e3;let cur=per[0];per.forEach(q=>{if(q.timestamp*1000<=nowS&&q.roadSurface&&q.roadSurface.tempC!=null)cur=q});
+  if(!cur.roadSurface||cur.roadSurface.tempC==null)throw new Error('Xweather returned no road temperature for this spot.');
+  return {tempC:cur.roadSurface.tempC,cond:cur.roadSurface.condition||'',road:(rp.road&&rp.road.name)||'',periodMs:cur.timestamp*1000,ms:Date.now()}}
 async function trafficFlow(loc){const x=trf();if(!x.key)throw new Error('Add a TomTom key first.');
   const pt=(Math.round(loc.lat*1000)/1000)+','+(Math.round(loc.lon*1000)/1000);
   const r=await net('https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?key='+encodeURIComponent(x.key)+'&point='+pt+'&unit=kmph');
@@ -890,11 +902,19 @@ async function trafficFlow(loc){const x=trf();if(!x.key)throw new Error('Add a T
   let j;try{j=JSON.parse(r.text).flowSegmentData}catch(e){j=null}
   if(!j||!(j.freeFlowSpeed>0))throw new Error('No traffic data came back for this spot.');
   return {cur:j.currentSpeed,free:j.freeFlowSpeed,conf:j.confidence,closed:!!j.roadClosure,ms:Date.now()}}
-async function nowWithTraffic(){const c=await ENV.nowConditions(S.home,S.rider.surface,S.a);c.traffic=null;const x=trf();
-  if(x.on&&x.key){try{const f=await trafficFlow(S.home);const cong=f.closed||(f.conf!=null&&f.conf<0.5)?0:Math.max(0,Math.min(1,1-f.cur/f.free)),adj=(S.a.trafficMaxC||0)*cong;
+async function nowWithTraffic(){const c=await ENV.nowConditions(S.home,S.rider.surface,S.a);c.traffic=null;c.xweather=null;const x=trf(),xw=xwc();
+  if(xw.on&&xw.id&&xw.secret){try{const q=await xweatherRoad(S.home);c.roadEstC=c.roadC;c.roadC=q.tempC;c.xweather=q}catch(e){c.xweather={err:e.message}}}
+  if(x.on&&x.key&&!(c.xweather&&!c.xweather.err)){try{const f=await trafficFlow(S.home);const cong=f.closed||(f.conf!=null&&f.conf<0.5)?0:Math.max(0,Math.min(1,1-f.cur/f.free)),adj=(S.a.trafficMaxC||0)*cong;
       c.roadBaseC=c.roadC;c.roadC=c.roadC+adj;c.traffic={cur:f.cur,free:f.free,cong,adj,ms:f.ms,conf:f.conf}}catch(e){c.traffic={err:e.message}}}
   return c}
 function trafficLine(){const t=now.traffic;if(!t)return '';if(t.err)return ' · traffic: '+esc(t.err);return ' · traffic moving at '+Math.round(t.cur/(US()?1.609344:1))+' of '+Math.round(t.free/(US()?1.609344:1))+' '+(US()?'mph':'km/h')+(t.adj>0.05?', road +'+(US()?(t.adj*1.8).toFixed(1):t.adj.toFixed(1))+' '+tU():', no road warming')}
+function xweatherCard(){const x=xwc(),q=now.xweather;
+  const line=q?(q.err?esc(q.err):`Road surface ${tF(q.tempC).toFixed(0)} ${tU()}${q.cond?' ('+esc(q.cond.toLowerCase())+')':''}${q.road?' on '+esc(q.road):''}, checked ${new Date(q.ms).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}. The app's own estimate was ${now.roadEstC!=null?tF(now.roadEstC).toFixed(0)+' '+tU():'not available'}.`):(S.home?'':'Set your location first (Data, above).');
+  return `<div class="card"><h2>Road temperature from Xweather</h2><p class="mute" style="margin-top:0">Optional. Xweather's Road Weather Conditions gives a modeled road surface temperature for the road nearest your saved location, refreshed about every 15 minutes. When it works, the app uses it instead of its own road estimate and sends it to the Garmin data field. It is a model, not a sensor at your spot, and covers North America, Europe, Japan, Australia and New Zealand. Create a free Xweather account at xweather.com to get a client ID and secret (15,000 requests a month at the time of writing).</p>
+  <div class="row"><div><label for="xwi">Xweather client ID</label><input id="xwi" data-xw="id" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(x.id||'')}"></div><div><label for="xws">Xweather client secret</label><input id="xws" type="password" data-xw="secret" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(x.secret||'')}"></div></div>
+  <div class="row" style="margin-top:8px"><div><label for="xwo">Use Xweather road temperature</label><select id="xwo" data-xwon="1"><option value="1"${x.on?' selected':''}>On</option><option value="0"${!x.on?' selected':''}>Off</option></select></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button data-act="xwnow"${x.id&&x.secret&&S.home?'':' disabled'}>Check road temperature now</button></div>
+  <p class="mute" id="xwmsg" aria-live="polite" style="margin:8px 0 0">${line}</p></div>`}
 function trafficCard(){const x=trf(),t=now.traffic;
   return `<div class="card"><h2>Traffic and road temperature</h2><p class="mute" style="margin-top:0">Slow, heavy traffic can warm the road a little. With a free TomTom key the app checks traffic near you and nudges the road temperature estimate up, which feeds the sealant drying estimate. This is optional and off until you add a key.</p>
   <label for="tk">TomTom API key</label><input id="tk" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" data-tk="1" value="${esc(x.key||'')}" placeholder="Paste your key">
@@ -934,6 +954,7 @@ function viewData(){
   ${srcRow('Fitbit, Wahoo, RideWithGPS, Komoot, TrainingPeaks','no','Not offered. Fitbit ended its old interface on 30 Sep 2026. The others need partner approval or have no public access')}
   ${srcRow('TyreGuru sensor','no','Planned. Until then you enter gauge readings and sealant checks by hand')}
   ${srcRow('AI review (Claude)',aiUrl()?'ok':'no',aiUrl()?'Sent through your AI review service when this page is not inside Claude':'Works inside Claude. For this app by itself, add a service address below')}</div>
+  ${xweatherCard()}
   ${trafficCard()}
   ${aiServiceCard()}
   <div class="card"><h2>Rides</h2><p class="mute" style="margin-top:0">${nR} rides, newest first (showing up to 8).</p><div class="scroll"><table><thead><tr><th>Date</th><th>Time</th><th>Distance</th><th>Air</th><th>Road est.</th><th>From</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No rides yet.</td></tr>'}</tbody></table></div></div>`;
@@ -1602,6 +1623,7 @@ document.addEventListener('click',async ev=>{
     t.sealant.events.push({dateMs:evStamp(t),ml:Math.round(ml*10)/10,kind:'removed'});S.example=false;
     const st=sealantStateFor(t,S.rides,Date.now());msg['a'+i]=sealChange(t,b0,st.leftMl,'removed');save();render(true)}
   else if(act==='aitest'){msg.aisvc='Testing…';render(true);try{const r=await aiProxy('/health',{method:'GET'});const j=r.j;msg.aisvc=!j||!j.ok?'That address did not answer like a TyreGuru service (status '+r.status+').':(j.configured?'Connected and switched on.'+(j.codeRequired&&!aiS().code?' It wants an access code.':''):'Connected. The service is deployed but has no key yet, so reviews stay off until you add one.')}catch(err){msg.aisvc='Could not reach it: '+err.message}render(true)}
+  else if(act==='xwnow'){xwc().on=true;save();msg.now='Looking up…';render(true);await fetchNow();render(true)}
   else if(act==='trafficnow'){msg.now='Looking up…';render(true);await fetchNow();render(true)}
   else if(act==='puncsave'){const i=+b.dataset.i,t=S.tires[i],d=pdraft(i),inp=$('#pm'+i),mlv=inp&&inp.value!==''?vIn(parseFloat(inp.value)):puncMl(t,d.hole,d.kind);
     if(!(mlv>=0)||isNaN(mlv)){msg['p'+i]='Enter the sealant lost, in '+vU()+'.';return render(true)}
@@ -1617,7 +1639,7 @@ document.addEventListener('click',async ev=>{
     t.sealant={brand:$('#ab').value.trim(),ml:Math.min(TG.fullDoseMl(t.widthMm,$('#ab').value,t.type,t.doseLevel),Math.round(s.leftMl+ml)),dateMs:dateMs(),events:[],addedMl:Math.round(ml*10)/10};S.sealSame=false;msg.log=`Sealant added. Estimated amount now ${vfmt(t.sealant.ml)}, treated as fresh from ${fmtD(t.sealant.dateMs)}.`;save();render()}
   else if(act==='defaults'){S.a=Object.assign({},TG.DEFAULTS);save();render()}
   else if(act==='copy'){const ta=$('#bk');try{await navigator.clipboard.writeText(ta.value);msg.bk='Copied.'}catch(e){ta.select();msg.bk='Text selected. Copy it with your keyboard.'}render()}
-  else if(act==='restore'){try{const j=JSON.parse($('#bk').value);if(!j.tires||!j.rider)throw new Error('not a TyreGuru backup');const keepSt=S.strava,keepSrc=S.src,keepTr=S.traffic,keepAi=S.ai;S=j;if(keepAi)S.ai=keepAi;if(keepSt)S.strava=keepSt;if(keepSrc)S.src=keepSrc;if(keepTr&&keepTr.key)S.traffic=Object.assign({},S.traffic||{},{key:keepTr.key});S.a=Object.assign({},TG.DEFAULTS,S.a);save();msg.bk='Restored.'}catch(e){msg.bk='Could not restore: '+e.message}render()}
+  else if(act==='restore'){try{const j=JSON.parse($('#bk').value);if(!j.tires||!j.rider)throw new Error('not a TyreGuru backup');const keepSt=S.strava,keepSrc=S.src,keepTr=S.traffic,keepAi=S.ai,keepXw=S.xw;S=j;if(keepXw&&keepXw.id)S.xw=Object.assign({},S.xw||{},{id:keepXw.id,secret:keepXw.secret});if(keepAi)S.ai=keepAi;if(keepSt)S.strava=keepSt;if(keepSrc)S.src=keepSrc;if(keepTr&&keepTr.key)S.traffic=Object.assign({},S.traffic||{},{key:keepTr.key});S.a=Object.assign({},TG.DEFAULTS,S.a);save();msg.bk='Restored.'}catch(e){msg.bk='Could not restore: '+e.message}render()}
   else if(act==='alopen'){const pl=alOpenPlan();msg.alopen=(AL().open?'':'The open-app sound is Off above. ')+pl.map(q=>q.nm+': '+(q.kind==='danger'?'alarm':q.kind==='chirp'?'chirp':'quiet')+' ('+q.why+')').join('. ')+'.';alOpenCheck();render(true)}
   else if(act==='wipe'){if(b.dataset.sure!=='1'){b.dataset.sure='1';b.textContent='Tap again to erase everything';return}try{localStorage.removeItem(KEY)}catch(e){}await stravaRevoke();S=example();window.__nativeState=null;msg={};exp={rides:true,weight:true,csv:''};save();render()}
 });
@@ -1625,6 +1647,7 @@ document.addEventListener('focusin',ev=>{const e=ev.target;if(e&&e.tagName==='IN
 document.addEventListener('input',ev=>{
   const e=ev.target;
   if(e&&e.dataset&&(e.dataset.aiu||e.dataset.aic)){const x=aiS();if(e.dataset.aiu)x.url=e.value.trim();else x.code=e.value.trim();save();flushSubs();const bt=document.querySelector('[data-act=aitest]');if(bt)bt.disabled=!aiUrl();return}
+  if(e&&e.dataset&&e.dataset.xw){xwc()[e.dataset.xw]=e.value.trim();save();const bx=document.querySelector('[data-act=xwnow]');if(bx)bx.disabled=!(xwc().id&&xwc().secret&&S.home);return}
   if(e&&e.dataset&&e.dataset.tk){trf().key=e.value.trim();save();const bt=document.querySelector('[data-act=trafficnow]');if(bt)bt.disabled=!(trf().key&&S.home);return}
   if(e&&e.dataset&&e.dataset.pml!==undefined){const d=pdraft(+e.dataset.pml),x=parseFloat(e.value);d.ml=isNaN(x)?null:vIn(x);return}
   /* brand field: typing a space finishes the word from the brand list ("P" + space becomes "Pirelli ") */
@@ -1656,6 +1679,7 @@ document.addEventListener('input',ev=>{
 document.addEventListener('change',ev=>{const e=ev.target;if(e.dataset&&e.dataset.cs){const added=addCustomSealant(e.value);if(added){save();render(true)}return}
   if(e.dataset&&e.dataset.f){const tm=/^tires\.(\d+)\.(brand|model|maxPsi|nominalMm)$/.exec(e.dataset.f);if(tm&&S.tires[+tm[1]]&&addCustomTire(S.tires[+tm[1]])){save();render(true)}}
   if(e.dataset&&e.dataset.shr){subQ().on=e.value==='1';save();render(true);return}
+  if(e.dataset&&e.dataset.xwon){xwc().on=e.value==='1';save();if(!xwc().on){if(now.roadEstC!=null)now.roadC=now.roadEstC;now.roadEstC=null;now.xweather=null}if(xwc().on&&xwc().id&&xwc().secret&&S.home)fetchNow();else render(true);return}
   if(e.dataset&&e.dataset.tn){trf().on=e.value==='1';save();if(!trf().on){if(now.roadBaseC!=null)now.roadC=now.roadBaseC;now.roadBaseC=null;now.traffic=null}if(trf().on&&trf().key&&S.home)fetchNow();else render(true);return}if(e.dataset&&e.dataset.pk!==undefined){const d=pdraft(+e.dataset.pk);d.kind=e.value;d.ml=null;render(true);return}if(e.dataset&&e.dataset.exp){exp[e.dataset.exp]=!!e.checked;exp.csv='';render(true);return}if(e.dataset&&e.dataset.alv){const a=AL(),k=e.dataset.alv;a[k]=(k==='mode'||k==='cue'||k==='where')?e.value:e.value==='1';if(k==='danger'&&!a.danger)alStop();save();alSchedule(true);render(true);return}if(e.dataset&&e.dataset.stbike){stv().bikeId=isNaN(+e.value)?e.value:+e.value;save();stravaSync(true);return}
   if(e.id==='lt'&&window.__est){const x=window.__est[+e.value];if(x){$('#la').placeholder='target '+x.tgt+', blank if no air added'}}
   if(e.id==='files'&&e.files.length){msg.imp='Reading…';render();importFiles(Array.from(e.files));}
@@ -1671,7 +1695,7 @@ const PROV_RE=/strava|apple|health|intervals|withings|whoop|garmin connect/i;
 const STRAVA_CACHE_MS=7*864e5;
 const isProv=x=>PROV_RE.test(String((x&&(x.source||x.src))||''));
 let exp={rides:true,weight:true,csv:''};
-function cleanCopy(){const c=JSON.parse(JSON.stringify(S));delete c.strava;delete c.src;delete c.ai;if(c.traffic)c.traffic={on:!!c.traffic.on,key:''};
+function cleanCopy(){const c=JSON.parse(JSON.stringify(S));delete c.strava;delete c.src;delete c.ai;if(c.xw)c.xw={on:!!c.xw.on,id:'',secret:''};if(c.traffic)c.traffic={on:!!c.traffic.on,key:''};
   c.rides=(c.rides||[]).filter(r=>!isProv(r)).map(r=>{const o=Object.assign({},r);delete o.lat;delete o.lon;return o});
   c.weights=(c.weights||[]).filter(w=>!isProv(w));if(c.home)delete c.home;return c}
 function pruneStrava(){const now=Date.now();let ch=false;
@@ -1981,7 +2005,7 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}
 pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();
 document.addEventListener('visibilitychange',()=>{if(document.hidden){alHiddenAt=Date.now();return}if(!document.hidden){if(alHiddenAt&&Date.now()-alHiddenAt>30000)alOpenCheck();alHiddenAt=0;try{if(tab==='home'&&detail===null)render(true);else checkAlerts()}catch(e){}autoLocate();autoHealth();stravaSync();syncAll()}});
 let alBeat=Date.now();setInterval(()=>{const n=Date.now();if(n-alBeat>30000&&!document.hidden)alOpenCheck();alBeat=n},2000);window.addEventListener('pageshow',ev=>{if(ev.persisted)alOpenCheck()});
-window.__TG={get S(){return S},importFiles,render,alOpenCheck,garminPayload,checkAlerts,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
+window.__TG={get S(){return S},xweatherRoad,get now(){return now},importFiles,render,alOpenCheck,garminPayload,checkAlerts,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
 })();
 
 </script>

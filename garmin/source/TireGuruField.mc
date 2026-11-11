@@ -36,6 +36,8 @@ class TireGuruField extends WatchUi.DataField {
     var stale = false;
     var staleRide = false;    // the phone app says the last reading was logged before the last ride
     var staleRideSig = false; // the alert for it has already sounded
+    var roadT = -999;         // road surface temperature from the phone app (Xweather), -999 = none
+    var roadU = 0;            // 0 = degrees C, 1 = degrees F
     var cb = false;
     var known = false;        // numbers have been entered (an update date is set)
     var alarmMode = 0;        // 0 sound and vibration, 1 vibration only, 2 silent
@@ -160,6 +162,14 @@ class TireGuruField extends WatchUi.DataField {
         chirpOn = readFloat("chirpOn") > 0.5;
         known = readFloat("updated") > 0.0;
         staleRide = readFloat("staleRide") > 0.5;
+        try {
+            var rt = Application.Storage.getValue("roadT");
+            roadT = (rt != null) ? rt.toNumber() : -999;
+            var ru = Application.Storage.getValue("roadU");
+            roadU = (ru != null) ? ru.toNumber() : 0;
+        } catch (e3) {
+            roadT = -999;
+        }
         var age = ageDays(readFloat("updated").toNumber());
         stale = (age < 0 || age > STALE_DAYS);
     }
@@ -259,6 +269,14 @@ class TireGuruField extends WatchUi.DataField {
     }
 
     // ---- drawing ----
+    // small road temperature note at the bottom right, only when the phone sent one and no warning line is showing
+    function drawRoad(dc, w, h) {
+        if (roadT <= -900 || staleRide || stale) { return; }
+        dc.setColor(0xA9A49B, Graphics.COLOR_BLACK);
+        var unit = (roadU == 1) ? "F" : "C";
+        dc.drawText(w - 4, h - Graphics.getFontHeight(Graphics.FONT_XTINY) / 2 - 1, Graphics.FONT_XTINY, "Road " + roadT.format("%d") + unit, Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
+    }
+
     function onUpdate(dc) {
         readAll();
         var w = dc.getWidth();
@@ -295,6 +313,7 @@ class TireGuruField extends WatchUi.DataField {
                 dc.setColor(0xF2B21A, Graphics.COLOR_BLACK);
                 dc.drawText(w / 2, h - Graphics.getFontHeight(Graphics.FONT_XTINY) / 2 - 1, Graphics.FONT_XTINY, "! numbers are old, update in Garmin Connect", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
             }
+            drawRoad(dc, w, h);
             return;
         }
 
@@ -327,6 +346,7 @@ class TireGuruField extends WatchUi.DataField {
             dc.setColor(0xF2B21A, Graphics.COLOR_BLACK);
             dc.drawText(w / 2, h - 2, Graphics.FONT_XTINY, "! numbers are old, update in Garmin Connect", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
+        drawRoad(dc, w, h);
     }
 
     // ---- Home-screen style layout: one box per tire (red or green outline, tag, two dials, readouts, fix line) ----

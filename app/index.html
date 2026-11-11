@@ -1529,7 +1529,11 @@ document.addEventListener('click',async ev=>{
   else if(act==='clearex'){S=Object.assign(example(),{example:false,rides:[],tires:example().tires.map(t=>Object.assign(t,{fills:[],sealant:Object.assign(t.sealant,{events:[]})}))});save();render()}
   else if(act==='usew'){S.rider.riderKg=+S.weights[S.weights.length-1].kg.toFixed(1);save();render()}
   else if(act==='ai')askAI();
-  else if(act==='stopen'){const x=stv();if(!x.id||!x.secret){msg.strava='Enter the Client ID and Client secret first.';return render(true)}save();window.open(stravaAuthUrl(),'_blank')}
+  else if(act==='stopen'){const x=stv();if(!x.id||!x.secret){msg.strava='Enter the Client ID and Client secret first.';return render(true)}save();const u=stravaAuthUrl();let w=null;try{w=window.open(u,'_blank')}catch(e){}
+    if(!w){msg.strava_link=u;msg.strava='This app could not open Strava by itself. Copy the link below, paste it into Safari (or a browser on your computer), tap Authorize, then copy the web address the browser ends on and paste it in step 3.';try{navigator.clipboard&&navigator.clipboard.writeText(u).catch(()=>{})}catch(e){}render(true)}}
+  else if(act==='stcopy'){const u=msg.strava_link||stravaAuthUrl();let ok=false;try{if(navigator.clipboard){await navigator.clipboard.writeText(u);ok=true}}catch(e){}
+    if(!ok){const ta=$('#st_link');if(ta){ta.focus();ta.select();try{ok=document.execCommand('copy')}catch(e){}}}
+    msg.strava=ok?'Link copied. Paste it into Safari.':'Press and hold the link above, choose Select All, then Copy.';render(true)}
   else if(act==='stconnect'){const raw=($('#st_code').value||'').trim();const m=/[?&]code=([^&\s]+)/.exec(raw),code=m?m[1]:raw;const x=stv();
     if(!code){msg.strava='Paste the address from step 3.';return render(true)}
     try{msg.strava='Connecting…';render(true);await stravaTokenCall({client_id:x.id,client_secret:x.secret,code,grant_type:'authorization_code'});msg.strava='Connected.';render(true);await stravaSync(true)}catch(e){msg.strava='Strava: '+e.message;render(true)}}
@@ -1777,9 +1781,10 @@ function stravaCard(){const x=stv(),on=!!x.refresh;
   ${x.bikes&&x.bikes.length?`<label for="stb">Bike to count</label><select id="stb" data-stbike="1">${x.bikes.map(b=>`<option value="${esc(String(b.id))}" ${String(x.bikeId)===String(b.id)?'selected':''}>${esc(b.name)} (${Math.round(dI(b.km))} ${dU()} total)</option>`).join('')}</select>`:''}
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button data-act="stsync">Read Strava now</button><button class="ghost" data-act="stdisc">Disconnect and remove Strava rides</button></div>`
   :`<details ${x.id?'open':''}><summary>Connect Strava (one time)</summary><div class="mute">
-  <p><b>1.</b> On strava.com open Settings, then My API Application, and create an application. Set <b>Authorization Callback Domain</b> to <b>localhost</b>. Copy its Client ID and Client Secret here.</p>
+  <p><b>1.</b> In a web browser (not the Strava phone app, which does not have this page) go to strava.com/settings/api and create an application. Set <b>Authorization Callback Domain</b> to <b>localhost</b>. Copy its Client ID and Client Secret here.</p>
   <div class="row"><div><label for="st_id">Client ID</label><input id="st_id" data-st="id" value="${esc(x.id||'')}" inputmode="numeric"></div><div><label for="st_secret">Client secret</label><input id="st_secret" data-st="secret" type="password" value="${esc(x.secret||'')}"></div></div>
   <p><b>2.</b> <button data-act="stopen">Open Strava and allow access</button></p>
+   ${msg.strava_link?`<label for="st_link">Strava link (copy this into Safari)</label><textarea id="st_link" rows="4" readonly spellcheck="false" autocapitalize="off">${esc(msg.strava_link)}</textarea><button class="ghost" data-act="stcopy" style="margin-top:6px">Copy link</button>`:''}
   <p><b>3.</b> Strava sends you to a page that will not load (localhost). Copy the whole address from the address bar and paste it here:</p>
   <div class="row"><div><label for="st_code">Address or code</label><input id="st_code" placeholder="http://localhost/?state=&code=..."></div><div style="align-self:end"><button data-act="stconnect">Connect</button></div></div></div></details>`}
   <p class="mute" id="stmsg" aria-live="polite">${esc(msg.strava||'')}</p></div>`}

@@ -889,7 +889,7 @@ async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Err
   if(r.status===401||r.status===403||(j&&j.error&&/invalid_client|unauthorized|forbidden|usage/i.test(String(j.error.code||''))))throw new Error('Xweather did not accept that ID and secret'+(j&&j.error&&j.error.description?' ('+j.error.description+')':'')+'.');
   if(r.status===429)throw new Error('Xweather says too many requests. Try again later.');
   if(!j||!j.success)throw new Error('Xweather: '+((j&&j.error&&(j.error.description||j.error.code))||('error '+r.status))+'.');
-  const rp=(j.response||[])[0],per=rp&&rp.periods||[];if(!per.length)throw new Error('No road data came back for this spot (coverage is North America, Europe, Japan, Australia and New Zealand).');
+  const rp=Array.isArray(j.response)?j.response[0]:j.response,per=(rp&&rp.periods)||[];if(!per.length)throw new Error('No road data came back for this spot'+(rp?' (Xweather found '+(rp.road&&rp.road.name?esc(rp.road.name):'no named road')+' but sent no road readings; fields: '+Object.keys(rp).join(', ')+')':' (empty answer from Xweather)')+'. Coverage is North America, Europe, Japan, Australia and New Zealand.');
   const nowS=Date.now()+15*60e3;let cur=per[0];per.forEach(q=>{if(q.timestamp*1000<=nowS&&q.roadSurface&&q.roadSurface.tempC!=null)cur=q});
   if(!cur.roadSurface||cur.roadSurface.tempC==null)throw new Error('Xweather returned no road temperature for this spot.');
   return {tempC:cur.roadSurface.tempC,cond:cur.roadSurface.condition||'',road:(rp.road&&rp.road.name)||'',periodMs:cur.timestamp*1000,ms:Date.now()}}

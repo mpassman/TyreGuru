@@ -30,6 +30,8 @@ h1{font-size:30px}h2{font-size:22px;margin-bottom:8px}h3{font-size:17px;text-tra
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0;min-width:0}
 .big{border-width:2px}.big.red{border-color:var(--red);background:#000}.big.green{border-color:var(--green);background:#000}
 .tag{display:inline-block;font:700 13px var(--disp);letter-spacing:.1em;text-transform:uppercase;padding:2px 9px;border-radius:4px;color:#fff}
+.card.stale{border-style:dashed;border-color:var(--mute)}.card.stale .gcard{filter:saturate(.35);opacity:.72}.stalenote{margin:8px 0;padding:8px 10px;border:2px solid var(--yel,#e6a817);border-radius:8px}
+.stalemodal{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:18px}.stalemodal .box{background:var(--card);color:var(--ink);border:3px solid var(--yel,#e6a817);border-radius:12px;max-width:420px;padding:18px}
 .tag.red{background:var(--red);color:#fff}.tag.green{background:var(--green);color:#fff}.tag.grey{background:var(--mute)}
 :root[data-theme="dark"] .tag.red,:root[data-theme="dark"] .tag.green{color:#111}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tag.red,:root:not([data-theme="light"]) .tag.green{color:#111}}
@@ -847,7 +849,7 @@ function garminPayload(){
   const F=get(f),R=get(r),d=new Date(),ymd=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   return {frontPsi:F.psi,frontTgt:F.tgt,rearPsi:R.psi,rearTgt:R.tgt,maxPsi:isFinite(F.x.A.lim)?Math.round(F.x.A.lim*10)/10:0,
     frontSeal:F.pct,rearSeal:R.pct,sealUnit:us?0:1,frontSealAmt:conv(F.left),frontFull:conv(F.full),rearSealAmt:conv(R.left),rearFull:conv(R.full),
-    updated:ymd,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
+    updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
 }
 let _garminLast='';
 function garminHandler(){try{return window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.garmin||null}catch(e){return null}}
@@ -1067,11 +1069,15 @@ function segBar(items,cur,attr){return `<div class="seg" role="tablist">${items.
 function bikeName(){return (S.rider&&S.rider.bikeName)||'My bike'}
 function bikeBar(){return `<div class="bikesel" data-goto="settings:bike" role="button" tabindex="0" aria-label="Bike: ${esc(bikeName())}. Tap to change"><span>${esc(bikeName())}</span><span aria-hidden="true">▾</span></div><p class="mute" style="margin:6px 0 2px">Estimated just now · ${S.rides.length} ride${S.rides.length===1?'':'s'} on file</p>`}
 function airZones(A){const tgt=A.tgt,lim=isFinite(A.lim)?A.lim:null,g1=lim!=null?Math.min(tgt*1.05,lim):tgt*1.05,over=lim!=null?lim:Math.max(tgt*1.25,g1+2);return {tgt,low:tgt*0.80,good0:tgt*0.90,good1:g1,over}}
+/* A reading is out of date when the last thing you logged for this tire (air, sealant check, puncture or top-up) came before your most recent ride ended. */
+function lastEntryMs(t){const m=(a,k)=>(a||[]).reduce((x,e)=>Math.max(x,(e&&e[k])||0),0);return Math.max(m(t.fills,'dateMs'),m(t.checks,'dateMs'),m(t.sealant&&t.sealant.events,'dateMs'),(t.sealant&&t.sealant.dateMs)||0)}
+function lastRideEndMs(){const now=Date.now();return (S.rides||[]).reduce((m,r)=>{const e=(r.startMs||0)+(r.hours||0)*36e5;return e>0&&e<=now+36e5?Math.max(m,e):m},0)}
+function staleInfo(t){const e=lastEntryMs(t),r=lastRideEndMs();return {stale:!S.example&&e>0&&r>0&&e<r,entryMs:e,rideMs:r}}
 function tireStatus(t){
   const A=advice(t),ar=A.air,sl=A.sealant,Z=airZones(A),airRed=ar.known&&(ar.needAir||ar.tooHigh),sealRed=!!sl.needAdd,overfilled=ar.known&&ar.estPsi>Z.over;
   const tg=Math.round(ar.tgt*10)/10;
   const fix=overfilled?`⚠ Overfilled! Release the valve to let air out until the gauge reads ${tg} PSI.`:(airRed?(ar.needAir?`Add air → ${ar.fillTo} PSI`:`⚠ Too high. Release the valve to let air out until the gauge reads ${tg} PSI.`):(sealRed?`Add ${vfmt(sl.addMl)} sealant`:'Good'));
-  return {fullMl:TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel),A,ar,sl,Z,airRed,sealRed,overfilled,red:airRed||sealRed,fix,airWord:!ar.known?'NO LOG':(overfilled?'OVERFILLED':(airRed?(ar.needAir?'LOW':'HIGH'):'GOOD'))};
+  return {st:staleInfo(t),fullMl:TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel),A,ar,sl,Z,airRed,sealRed,overfilled,red:airRed||sealRed,fix,airWord:!ar.known?'NO LOG':(overfilled?'OVERFILLED':(airRed?(ar.needAir?'LOW':'HIGH'):'GOOD'))};
 }
 function levelWord(x){
   const dose=x.fullMl||x.sl.doseMl||1,pct=x.sl.leftMl/dose;
@@ -1091,9 +1097,10 @@ function alUnlock(){try{if(!alCtx){const C=window.AudioContext||window.webkitAud
 function alTone(notes){if(!alCtx)return;const t0=alCtx.currentTime+.02;notes.forEach(([f,s0,d])=>{const o=alCtx.createOscillator(),g=alCtx.createGain();o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0,t0+s0);g.gain.linearRampToValueAtTime(.35,t0+s0+.01);g.gain.linearRampToValueAtTime(0,t0+s0+d);o.connect(g);g.connect(alCtx.destination);o.start(t0+s0);o.stop(t0+s0+d+.02)})}
 /* kind: 'danger' (three beeps, 880 Hz) or 'chirp' (one short 2093 Hz tone). mode: both | vibrate | off */
 function alFire(kind,force){const A0=AL(),m=A0.mode;if(m==='off')return;if(A0.where==='garmin'&&!force)return;const sound=m==='both',vib=m==='both'||m==='vibrate',h=alNat();
-  if(h){try{h.postMessage({cmd:'alert',kind,sound,vib});return}catch(e){}}
-  if(sound)alTone(kind==='chirp'?[[2093,0,.16]]:[[880,0,.14],[880,.22,.14],[880,.44,.14]]);
-  if(vib){try{navigator.vibrate&&navigator.vibrate(kind==='chirp'?[40]:[200,100,200,100,200])}catch(e){}}}
+  /* 'stale' = last reading is before the last ride: two lower beeps. The native wrapper only knows danger and chirp, so it is sent as danger with variant:'stale'. */
+  if(h){try{h.postMessage({cmd:'alert',kind:kind==='stale'?'danger':kind,variant:kind==='stale'?'stale':undefined,sound,vib});return}catch(e){}}
+  if(sound)alTone(kind==='chirp'?[[2093,0,.16]]:(kind==='stale'?[[660,0,.18],[660,.3,.18]]:[[880,0,.14],[880,.22,.14],[880,.44,.14]]));
+  if(vib){try{navigator.vibrate&&navigator.vibrate(kind==='chirp'?[40]:(kind==='stale'?[150,90,150]:[200,100,200,100,200]))}catch(e){}}}
 /* A tire is in danger when its dial reads red: air over the maximum or hookless limit, air more than 20% below target, or sealant under 40% of a full dose. */
 function alDanger(){const out=[];S.tires.forEach(t=>{const x=tireStatus(t),nm=t.wheel==='front'?'Front':'Rear';
   if(x.ar.known){if(x.overfilled)out.push({id:t.wheel+':airhigh',msg:`${nm} tire is over its maximum pressure. Let air out until the gauge reads ${Math.round(x.ar.tgt*10)/10} PSI.`});else if(x.ar.estPsi<x.Z.low)out.push({id:t.wheel+':airlow',msg:`${nm} tire air is more than 20% below target. Add air to ${x.ar.fillTo} PSI.`})}
@@ -1104,9 +1111,10 @@ function alOpenPlan(){const d=alDanger();return S.tires.map(t=>{const x=tireStat
     else if(!x.ar.known)why='no air logged yet';
     else{kind='chirp';const L=levelWord(x);why=(L.airKey==='g'&&L.sealKey==='g')?'both dials green':'no red dial, only yellow'}
     return {nm,kind,why}})}
-function alOpenCheck(){const a=AL();alOpened=true;alOpenTm.forEach(clearTimeout);alOpenTm=[];if(!a.open)return;
-  alOpenPlan().forEach((q,i)=>{if(q.kind)alOpenTm.push(setTimeout(()=>alFire(q.kind),i*1100))})}
-function alOptimal(){return S.tires.length>0&&S.tires.every(t=>{const x=tireStatus(t),L=levelWord(x);return x.ar.known&&L.airKey==='g'&&L.sealKey==='g'})}
+function alOpenCheck(){const a=AL();alOpened=true;alOpenTm.forEach(clearTimeout);alOpenTm=[];staleAck=false;staleSeen={};if(!a.open)return;
+  const pl=alOpenPlan();pl.forEach((q,i)=>{if(q.kind)alOpenTm.push(setTimeout(()=>alFire(q.kind),i*1100))});
+  const st=staleTires();if(st.length){st.forEach(t=>{staleSeen[t.wheel]=staleInfo(t).rideMs});alOpenTm.push(setTimeout(()=>alFire('stale'),pl.length*1100))}}
+function alOptimal(){return S.tires.length>0&&S.tires.every(t=>{const x=tireStatus(t),L=levelWord(x);return !x.st.stale&&x.ar.known&&L.airKey==='g'&&L.sealKey==='g'})}
 function alBase0(t){const c=(t.checks||[]).reduce((m,q)=>Math.max(m,q.dateMs||0),0);return Math.max(t.sealant.dateMs||0,c)}
 function alNextCheck(t){const d=TG.doseInfo(t.widthMm,t.sealant.brand,t.type),m=d&&d.chk?/\d+(\.\d+)?/.exec(d.chk):null,b=alBase0(t);return m&&b?b+parseFloat(m[0])*30.4*DAY:null}
 function alDue(){return S.tires.filter(t=>{const n=alNextCheck(t);return n&&n<=Date.now()})}
@@ -1122,14 +1130,19 @@ function checkAlerts(){const a=AL(),d=alDanger(),ids=d.map(q=>q.id);let dirty=fa
   const fresh=a.danger?d.filter(q=>!alSeen[q.id]):[];
   Object.keys(alSeen).forEach(k=>{if(!ids.includes(k))delete alSeen[k]});ids.forEach(k=>{alSeen[k]=true});
   if(fresh.length&&(alOpened||!a.open))alFire('danger');
+  const sf=staleTires().filter(t=>staleSeen[t.wheel]!==staleInfo(t).rideMs);S.tires.forEach(t=>{if(!staleInfo(t).stale)delete staleSeen[t.wheel]});if(sf.length&&alOpened){sf.forEach(t=>{staleSeen[t.wheel]=staleInfo(t).rideMs});staleAck=false;if(!fresh.length)alFire('stale')}
   const opt=alOptimal(),chirp=alBase&&opt&&!a.wasOpt&&a.chirp&&!pend.length;
   if(a.wasOpt!==opt){a.wasOpt=opt;dirty=true}alBase=true;if(dirty)save();alSchedule(false);
   if(chirp){alFire('chirp');alOkMs=Date.now();if(tab==='home'&&detail===null)render(true);setTimeout(()=>{if(tab==='home'&&detail===null)render(true)},8200)}}
+let staleAck=false,staleSeen={};   // the pop-up shows once each time the app opens, until you tap OK
+function staleTires(){return S.tires.filter(t=>staleInfo(t).stale)}
+function staleModal(){const st=staleTires();if(!st.length||staleAck)return '';const nm=st.map(t=>t.wheel==='front'?'front':'rear').join(' and '),r=staleInfo(st[0]).rideMs;
+  return `<div class="stalemodal" role="alertdialog" aria-modal="true" aria-labelledby="stm"><div class="box"><h2 id="stm" style="margin-top:0">Your last reading is out of date</h2><p>Your last reading for the ${nm} tire${st.length>1?'s':''} was before your last ride (${fmtD(r)}).</p><p><b>Before you ride, check the pressure with a gauge and look for signs of punctures and sealant leaks.</b> Then log what you find so the colors are right.</p><button data-act="staleok" style="width:100%;font-size:1.1em">OK, I will check</button></div></div>`}
 function alertBanner(){const a=AL(),p=alPending(),strong=cuesOn();let h='';
   if(p.length)h+=`<div class="card big red" role="alert" aria-live="assertive" style="${strong?'border-width:4px;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.14) 0 8px,transparent 8px 16px)':''}"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0;${strong?'font-size:1.5em':''}">✕ DANGER</h2><span class="tag red">✕ ALARM</span></div>${p.map(q=>`<p style="margin:8px 0;${strong?'font-size:1.15em':''}"><b>✕ ${esc(q.msg)}</b></p>`).join('')}<button data-act="alack" style="width:100%">Acknowledge</button><p class="mute" style="margin:6px 0 0">The alarm sounds once. This warning stays until you tap Acknowledge or fix the problem.</p></div>`;
   if(Date.now()-alOkMs<8000&&!p.length)h+=`<div class="card big green" role="status"><b>✓ Both tires are in the green. Good to ride.</b></div>`;
   const due=alDue();if(due.length&&a.remind)h+=`<div class="card" role="status" style="border:2px solid var(--yel,#e6a817)"><b>Sealant check due</b><p class="mute" style="margin:4px 0 0">${due.map(t=>t.wheel==='front'?'Front':'Rear').join(' and ')} tire${due.length>1?'s':''}: your ${esc(due[0].sealant.brand||'sealant')} maker suggests a check about now. Look and feel, then log what you find in Settings, Log.</p></div>`;
-  return h}
+  return h+staleModal()}
 function alertsCard(){const a=AL(),o=(v,cur,l)=>`<option value="${v}"${String(cur)===String(v)?' selected':''}>${l}</option>`,onoff=k=>o('1',a[k]?'1':'0','On')+o('0',a[k]?'1':'0','Off');
   return `<div class="card"><h3 style="margin-top:0">Alerts</h3><p class="mute" style="margin-top:0">Alerts work while TyreGuru is open, from your last readings and the sealant's age. They are not live readings from the tires.</p><div class="row"><div><label for="alm">Sound and vibration</label><select id="alm" data-alv="mode">${o('both',a.mode,'Sound + vibration')}${o('vibrate',a.mode,'Vibration only')}${o('off',a.mode,'Silent (on-screen only)')}</select></div><div><label for="ald">Danger alarm</label><select id="ald" data-alv="danger">${onoff('danger')}</select></div></div>
   <div class="row"><div><label for="alc">Chirp when both tires are optimal</label><select id="alc" data-alv="chirp">${onoff('chirp')}</select></div><div><label for="alr">Sealant check reminders</label><select id="alr" data-alv="remind">${onoff('remind')}</select></div></div>
@@ -1184,9 +1197,11 @@ function airZoneLine(x){const Z=x.Z,r=v=>String(Math.round(v*10)/10);
   return `<p class="mute zoneline" style="margin:6px 0 0;font-size:12px">Target ${r(Z.tgt)} PSI · <b>Green</b> ${r(Z.good0)}–${r(Z.good1)} · <b>Refill soon</b> ${r(Z.low)}–${r(Z.good0)} (10–20% below target) · <b>Red</b> under ${r(Z.low)} (more than 20% below)</p>`}
 function sumCard(t){
   const i=S.tires.indexOf(t),x=tireStatus(t),L=levelWord(x),nm=t.wheel==='front'?'Front':'Rear';
-  return `<div class="card big ${x.red?'red':'green'}"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${nm} tire</h2><span class="tag ${x.red?'red':'green'}">${x.red?'✕ RED':'✓ GREEN'}</span></div>
+  const old=x.st.stale&&!x.red;   // red stays strong; only green and yellow are softened when the reading is out of date
+  return `<div class="card big ${x.red?'red':'green'}${old?' stale':''}"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${nm} tire</h2><span class="tag ${old?'grey':(x.red?'red':'green')}">${old?'? OLD READING':(x.red?'✕ RED':'✓ GREEN')}</span></div>
+  ${x.st.stale?`<p class="stalenote" role="status"><b>Last reading was before your last ride (${fmtD(x.st.rideMs)}).</b> Check pressure and look for signs of punctures and sealant leaks before you ride, then log what you find.</p>`:''}
   ${gaugeRow(t,x,L,{air:`<div class="gin"><label for="ha${i}">Air measured, PSI</label><input id="ha${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" value="" placeholder="e.g. 42.6"></div>`,seal:`<div class="gin"><label for="hs${i}">Sealant checked</label><select id="hs${i}"><option value="">Not checked</option><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div>`})}<div style="margin:6px 0"><label for="hd${i}">Muc-Off dipstick, notches wet (optional)</label><input id="hd${i}" type="number" inputmode="numeric" step="1" min="0" max="99" autocomplete="off" placeholder="${dipBase(t)?'e.g. '+Math.max(0,dipBase(t).baseNotch-2):'set the baseline in Details first'}"></div>${patternsOn()?'<p class="mute" style="margin:0;font-size:11px;text-align:center">Stripes = low · dots = OK · solid = good · grid = too high · cross-hatch red = overfilled</p>':''}
-  <p class="fix" style="${(x.ar.known&&!x.ar.needAir&&x.airRed)?'color:var(--red)':''}">${x.red?x.fix:(x.ar.known?'Good':'Log an air fill to start')}</p>
+  <p class="fix" style="${(x.ar.known&&!x.ar.needAir&&x.airRed)?'color:var(--red)':''}">${x.red?x.fix:(old?'Check before you ride':(x.ar.known?'Good':'Log an air fill to start'))}</p>
   ${airZoneLine(x)}
   ${newTireNote(t)}
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button data-act="homesave" data-i="${i}">Save readings</button><button class="ghost" data-open="${i}">Details ›</button></div><p class="mute" id="hm${i}" aria-live="polite" style="margin:6px 0 0">${esc(msg['h'+i]||'')}</p></div>`;
@@ -1449,6 +1464,7 @@ document.addEventListener('click',async ev=>{
   const b=ev.target.closest('[data-act]');if(!b)return;const act=b.dataset.act;
   if(act==='garminconnect'){const h=garminHandler();if(h)h.postMessage('select');return}
   if(act==='garminsend'){pushGarmin(true);return}
+  if(act==='staleok'){staleAck=true;render(true);return}
   const tire=()=>S.tires[+$('#lt').value],dateMs=()=>toMs($('#ld').value);
   if(act==='back'){detail=null;render();window.scrollTo(0,0)}
   else if(act==='tedit'){editTire=editTire===+b.dataset.i?null:+b.dataset.i;render()}
@@ -1914,7 +1930,7 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}
 pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();
 document.addEventListener('visibilitychange',()=>{if(document.hidden){alHiddenAt=Date.now();return}if(!document.hidden){if(alHiddenAt&&Date.now()-alHiddenAt>30000)alOpenCheck();alHiddenAt=0;try{if(tab==='home'&&detail===null)render(true);else checkAlerts()}catch(e){}autoLocate();autoHealth();stravaSync();syncAll()}});
 let alBeat=Date.now();setInterval(()=>{const n=Date.now();if(n-alBeat>30000&&!document.hidden)alOpenCheck();alBeat=n},2000);window.addEventListener('pageshow',ev=>{if(ev.persisted)alOpenCheck()});
-window.__TG={get S(){return S},importFiles,render,alOpenCheck};
+window.__TG={get S(){return S},importFiles,render,alOpenCheck,garminPayload,checkAlerts,setAck:v=>{staleAck=v}};
 })();
 
 </script>

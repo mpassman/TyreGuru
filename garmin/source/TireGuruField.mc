@@ -34,6 +34,8 @@ class TireGuruField extends WatchUi.DataField {
     var sealUnit = 0;         // 0 fl oz, 1 ml
     var maxPsi = 0.0;
     var stale = false;
+    var staleRide = false;    // the phone app says the last reading was logged before the last ride
+    var staleRideSig = false; // the alert for it has already sounded
     var cb = false;
     var known = false;        // numbers have been entered (an update date is set)
     var alarmMode = 0;        // 0 sound and vibration, 1 vibration only, 2 silent
@@ -79,6 +81,9 @@ class TireGuruField extends WatchUi.DataField {
     }
 
     function checkAlerts() {
+        // out-of-date reading: sounds once when it appears, again only if it clears and returns
+        if (known && staleRide && !staleRideSig && alarmMode < 2) { playAlert(2); }
+        staleRideSig = staleRide;
         if (!known || stale) { return; }
         var bits = dangerBits();
         if (dangerOn) {
@@ -94,21 +99,24 @@ class TireGuruField extends WatchUi.DataField {
             try { saved = Application.Storage.getValue("wasOpt"); } catch (e) { saved = null; }
             if (saved != null && saved == true) { wasOptimal = true; }
         }
-        if (opt && !wasOptimal && chirpOn && bits == 0) { playAlert(0); }
+        if (opt && !wasOptimal && chirpOn && bits == 0 && !staleRide) { playAlert(0); }
         if (opt != wasOptimal) {
             wasOptimal = opt;
             try { Application.Storage.setValue("wasOpt", opt); } catch (e2) { }
         }
     }
 
-    // kind 1 = danger (alarm tone, long double buzz), 0 = optimal chirp (one high tone, short buzz).
+    // kind 1 = danger (alarm tone, long double buzz), 0 = optimal chirp (one high tone, short buzz),
+    // 2 = out-of-date reading (low alert tone, two short buzzes).
     function playAlert(kind) {
         if (alarmMode >= 2) { return; }
         if (alarmMode == 0 && Attention has :playTone) {
-            if (kind == 1) { Attention.playTone(Attention.TONE_ALARM); } else { Attention.playTone(Attention.TONE_ALERT_HI); }
+            if (kind == 1) { Attention.playTone(Attention.TONE_ALARM); } else if (kind == 2) { Attention.playTone(Attention.TONE_ALERT_LO); } else { Attention.playTone(Attention.TONE_ALERT_HI); }
         }
         if (Attention has :vibrate) {
-            if (kind == 1) {
+            if (kind == 2) {
+                Attention.vibrate([new Attention.VibeProfile(80, 200), new Attention.VibeProfile(0, 150), new Attention.VibeProfile(80, 200)]);
+            } else if (kind == 1) {
                 Attention.vibrate([new Attention.VibeProfile(100, 450), new Attention.VibeProfile(0, 150), new Attention.VibeProfile(100, 450)]);
             } else {
                 Attention.vibrate([new Attention.VibeProfile(60, 150)]);
@@ -151,12 +159,27 @@ class TireGuruField extends WatchUi.DataField {
         dangerOn = readFloat("dangerOn") > 0.5;
         chirpOn = readFloat("chirpOn") > 0.5;
         known = readFloat("updated") > 0.0;
+        staleRide = readFloat("staleRide") > 0.5;
         var age = ageDays(readFloat("updated").toNumber());
         stale = (age < 0 || age > STALE_DAYS);
     }
 
     // ---- colors: zone 0 low, 1 OK, 2 good, 3 high, 4 overfilled ----
+    function soften(c) {
+        var r = (((c >> 16) & 0xFF) + 0x80) / 2;
+        var g = (((c >> 8) & 0xFF) + 0x80) / 2;
+        var b = ((c & 0xFF) + 0x80) / 2;
+        return (r.toNumber() << 16) | (g.toNumber() << 8) | b.toNumber();
+    }
+
+    // out-of-date reading: green, yellow and purple are softened, red stays strong
     function zoneColor(z) {
+        var c = zoneColorRaw(z);
+        if (staleRide && z != 0 && z != 4) { c = soften(c); }
+        return c;
+    }
+
+    function zoneColorRaw(z) {
         if (cb) {
             // color-blind palette, same as the app
             if (z == 0 || z == 4) { return 0xD55E00; }
@@ -172,6 +195,12 @@ class TireGuruField extends WatchUi.DataField {
 
     // lighter text colors used for the readouts under the dials, same as the app
     function textColor(z) {
+        var c = textColorRaw(z);
+        if (staleRide && z != 0 && z != 4) { c = soften(c); }
+        return c;
+    }
+
+    function textColorRaw(z) {
         if (cb) {
             if (z == 0 || z == 4) { return 0xFF9A4D; }
             if (z == 1) { return 0xF0E442; }
@@ -259,7 +288,10 @@ class TireGuruField extends WatchUi.DataField {
                 dc.drawText(w / 2, h / 2, Graphics.FONT_XTINY, m, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
                 ex.printStackTrace();
             }
-            if (stale) {
+            if (staleRide) {
+                dc.setColor(0xF2B21A, Graphics.COLOR_BLACK);
+                dc.drawText(w / 2, h - Graphics.getFontHeight(Graphics.FONT_XTINY) / 2 - 1, Graphics.FONT_XTINY, "! last reading was before your last ride: check tires", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            } else if (stale) {
                 dc.setColor(0xF2B21A, Graphics.COLOR_BLACK);
                 dc.drawText(w / 2, h - Graphics.getFontHeight(Graphics.FONT_XTINY) / 2 - 1, Graphics.FONT_XTINY, "! numbers are old, update in Garmin Connect", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
             }
@@ -288,7 +320,10 @@ class TireGuruField extends WatchUi.DataField {
                 drawSeal(dc, x0, y0, cw, ch, front ? fSeal : rSeal, front ? "FRONT" : "REAR");
             }
         }
-        if (stale) {
+        if (staleRide) {
+            dc.setColor(0xF2B21A, Graphics.COLOR_BLACK);
+            dc.drawText(w / 2, h - 2, Graphics.FONT_XTINY, "! last reading was before your last ride: check tires", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        } else if (stale) {
             dc.setColor(0xF2B21A, Graphics.COLOR_BLACK);
             dc.drawText(w / 2, h - 2, Graphics.FONT_XTINY, "! numbers are old, update in Garmin Connect", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }

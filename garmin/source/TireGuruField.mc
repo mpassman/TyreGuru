@@ -36,8 +36,6 @@ class TireGuruField extends WatchUi.DataField {
     var stale = false;
     var staleRide = false;    // the phone app says the last reading was logged before the last ride
     var staleRideSig = false; // the alert for it has already sounded
-    var roadT = -999;         // road surface temperature from the phone app (Xweather), -999 = none
-    var roadU = 0;            // 0 = degrees C, 1 = degrees F
     var cb = false;
     var known = false;        // numbers have been entered (an update date is set)
     var alarmMode = 0;        // 0 sound and vibration, 1 vibration only, 2 silent
@@ -162,8 +160,6 @@ class TireGuruField extends WatchUi.DataField {
         chirpOn = readFloat("chirpOn") > 0.5;
         known = readFloat("updated") > 0.0;
         staleRide = readFloat("staleRide") > 0.5;
-        roadT = readFloat("roadT").toNumber();   // phone app's Xweather reading, or the property default -999 = none
-        roadU = readFloat("roadU").toNumber();
         var age = ageDays(readFloat("updated").toNumber());
         stale = (age < 0 || age > STALE_DAYS);
     }

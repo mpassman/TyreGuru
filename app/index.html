@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-11 A1';
+const BUILD='2026-11-11 A3';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -849,7 +849,7 @@ function garminPayload(){
   const F=get(f),R=get(r),d=new Date(),ymd=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   return {frontPsi:F.psi,frontTgt:F.tgt,rearPsi:R.psi,rearTgt:R.tgt,maxPsi:isFinite(F.x.A.lim)?Math.round(F.x.A.lim*10)/10:0,
     frontSeal:F.pct,rearSeal:R.pct,sealUnit:us?0:1,frontSealAmt:conv(F.left),frontFull:conv(F.full),rearSealAmt:conv(R.left),rearFull:conv(R.full),
-    updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,roadT:(now&&now.xweather&&!now.xweather.err&&Date.now()-now.xweather.ms<90*60e3)?Math.round(tF(now.xweather.tempC)):-999,roadU:us?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
+    updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
 }
 let _garminLast='';
 function garminHandler(){try{return window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.garmin||null}catch(e){return null}}
@@ -941,7 +941,7 @@ function xwLogLine(){const L=roadLog(),xn=L.filter(e=>e.xw!=null).length,rx=S.ri
   return `<p class="mute" style="margin:8px 0 0">Saved readings (last 14 days): ${xn} from Xweather, ${L.length-xn} estimate only. ${rx} of ${S.rides.length} rides use Xweather readings taken during the ride; the rest keep the app's own estimate. Readings are saved only while the app is open. Both numbers are in the CSV export.</p>`}
 function xweatherCard(){const x=xwc(),q=now.xweather;
   const line=q?(q.err?esc(q.err):`Road surface ${tF(q.tempC).toFixed(0)} ${tU()}${q.cond?' ('+esc(q.cond.toLowerCase())+')':''}${q.road?' on '+esc(q.road):''}, checked ${new Date(q.ms).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}. The app's own estimate was ${now.roadEstC!=null?tF(now.roadEstC).toFixed(0)+' '+tU():'not available'}.`):(S.home?'':'Set your location first (Data, above).');
-  return `<div class="card"><h2>Road temperature from Xweather</h2><p class="mute" style="margin-top:0">Optional. Xweather's Road Weather Conditions gives a modeled road surface temperature for the road nearest your saved location, refreshed about every 15 minutes. When it works, the app uses it instead of its own road estimate and sends it to the Garmin data field. It is a model, not a sensor at your spot, and covers North America, Europe, Japan, Australia and New Zealand. Create a free Xweather account at xweather.com to get a client ID and secret (15,000 requests a month at the time of writing).</p>
+  return `<div class="card"><h2>Road temperature from Xweather</h2><p class="mute" style="margin-top:0">Optional. Xweather's Road Weather Conditions gives a modeled road surface temperature for the road nearest your saved location, refreshed about every 15 minutes. When it works, the app uses it instead of its own road estimate in the sealant calculation. It is not sent to the Garmin data field. It is a model, not a sensor at your spot, and covers North America, Europe, Japan, Australia and New Zealand. Create a free Xweather account at xweather.com to get a client ID and secret (15,000 requests a month at the time of writing).</p>
   <div class="row"><div><label for="xwi">Xweather client ID</label><input id="xwi" data-xw="id" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(x.id||'')}"></div><div><label for="xws">Xweather client secret</label><input id="xws" type="password" data-xw="secret" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(x.secret||'')}"></div></div>
   <div class="row" style="margin-top:8px"><div><label for="xwp">Road location (optional): a street address, ZIP code or lat,lon on the road you ride</label><input id="xwp" data-xw="place" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="5606 N Lamar Blvd, Austin, TX" value="${esc(x.place||'')}"></div></div>
   <div class="row" style="margin-top:8px"><div><label for="xwo">Use Xweather road temperature</label><select id="xwo" data-xwon="1"><option value="1"${x.on?' selected':''}>On</option><option value="0"${!x.on?' selected':''}>Off</option></select></div></div>

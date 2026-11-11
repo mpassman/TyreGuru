@@ -1337,6 +1337,49 @@ function sealTrendCard(t){
   <div class="stat"><span class="mute">Refill level (${Math.round((S.a.triggerFraction||0.4)*100)}% of a full dose)</span><br><b>${un(trig)}</b></div>
   ${eta?`<div class="stat" style="background:var(--line)"><span class="mute">${eta} Heat, rides and punctures change this, so check the sealant by hand.</span></div>`:''}
   <div class="card"><h3 style="margin-top:0">Sealant changes</h3><div class="scroll"><table><thead><tr><th>Date</th><th>What</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table></div>${(t.sealHist||[]).length?'':'<p class="mute" style="margin:6px 0 0">Earlier refills from before this update were not kept. From now on every refill stays on the chart, or add them below.</p>'}</div>${past}`}
+/* ---------- estimate versus entered: the same comparison for all four series (front air, rear air, front sealant, rear sealant) ----------
+   Each time you enter a gauge reading, a dipstick reading or a sealant check, the app keeps what it had estimated just before (a snapshot), so the pair can be compared later and exported.
+   Air: estimate vs gauge, in PSI. Sealant: estimate vs dipstick or check level, in points of the starting dose (a check level counts as plenty 80, some 50, low 20, dry 0). */
+const MODEL_V='2026-11-10';
+const CMP_LVL={plenty:.8,some:.5,low:.2,dry:0};
+function recentMs(ms){return Math.abs((ms||0)-Date.now())<6*36e5}
+function fillPushEst(t,o){try{const f=(t.fills||[]).slice().sort((a,b)=>a.dateMs-b.dateMs),last=f[f.length-1];
+    if(o.beforePsi!=null&&last&&recentMs(o.dateMs)&&(o.dateMs-last.dateMs)/DAY>=0.5){const A=advice(t);if(A.air&&A.air.known){o.estPsi=Math.round(A.air.estPsi*10)/10;o.estV=MODEL_V}}}catch(e){}
+  t.fills.push(o)}
+function checkPushEst(t,o){try{if(recentMs(o.dateMs)){const st=sealantStateFor(t,S.rides,o.dateMs);if(st&&st.doseMl>0){o.estFrac=Math.round(Math.max(0,st.leftMl)/st.doseMl*1000)/1000;o.estV=MODEL_V}}}catch(e){}
+  t.checks.push(o)}
+function cmpPairs(t){const out=[],w=t.wheel,DAY_=86400000;
+  const f=(t.fills||[]).slice().sort((a,b)=>a.dateMs-b.dateMs);
+  f.forEach((c,k)=>{if(k<1||c.beforePsi==null||(c.dateMs-f[k-1].dateMs)/DAY_<0.5)return;let est=null,basis='snapshot';
+    if(c.estPsi!=null)est=c.estPsi;else{basis='recomputed';try{const st=TG.airState({lastFill:f[k-1],fills:f.slice(0,k),targetPsi:1,nowMs:c.dateMs,nowC:c.fillC!=null?c.fillC:null,nowAltM:c.altM!=null?c.altM:null,a:S.a});if(st.known)est=st.estPsi}catch(e){}}
+    if(est==null)return;out.push({series:w+'_air',metric:'air',unit:'psi',ms:c.dateMs,source:'gauge',est,entered:c.beforePsi,err:est-c.beforePsi,tol:2,basis,priorN:k})});
+  (t.dipReadings||[]).forEach((r,k)=>out.push({series:w+'_sealant',metric:'sealant',unit:'points_of_start_dose',ms:r.ms,source:'dipstick',est:r.estPct*100,entered:r.dipPct*100,err:r.diffPts,tol:100/r.baseNotch,basis:'snapshot',priorN:k}));
+  (t.checks||[]).filter(c=>c.dateMs>=(t.sealant.dateMs||0)).forEach((c,k)=>{const lv=CMP_LVL[c.level];if(lv==null)return;let est=c.estFrac,basis='snapshot';
+    if(est==null){basis='recomputed';try{const t2=Object.assign({},t,{checks:(t.checks||[]).filter(x=>x.dateMs<c.dateMs&&x.dateMs>=t.sealant.dateMs)}),st=sealantStateFor(t2,S.rides,c.dateMs);est=st.doseMl>0?Math.max(0,st.leftMl)/st.doseMl:null}catch(e){est=null}}
+    if(est==null)return;out.push({series:w+'_sealant',metric:'sealant',unit:'points_of_start_dose',ms:c.dateMs,source:'check_'+c.level,est:est*100,entered:lv*100,err:(est-lv)*100,tol:15,basis,priorN:k})});
+  return out.sort((a,b)=>a.ms-b.ms)}
+function cmpStats(P){const n=P.length;if(!n)return null;const ab=x=>Math.abs(x.err),mean=a=>a.reduce((q,x)=>q+x,0)/a.length;
+  const h=Math.floor(n/2),first=n>=6?mean(P.slice(0,h).map(ab)):null,last=n>=6?mean(P.slice(n-h).map(ab)):null;
+  let trend='needs 6+ entries';if(first!=null){trend=last<first*0.9?'closer':(last>first*1.1?'further apart':'steady')}
+  return {n,mae:mean(P.map(ab)),bias:mean(P.map(x=>x.err)),within:P.filter(x=>ab(x)<=x.tol).length,first,last,trend}}
+function cmpRolling(P,k){return P.map((x,i)=>{const w=P.slice(Math.max(0,i-k+1),i+1);return {ms:x.ms,v:w.reduce((q,y)=>q+Math.abs(y.err)/y.tol,0)/w.length}})}
+function cmpCard(){
+  const SER=[['front_air','Front air','#1f78d1',''],['rear_air','Rear air','#1f78d1','5 4'],['front_sealant','Front sealant','#d9730d',''],['rear_sealant','Rear sealant','#d9730d','5 4']];
+  const all={};S.tires.forEach(t=>cmpPairs(t).forEach(q=>(all[q.series]=all[q.series]||[]).push(q)));
+  const has=SER.filter(q=>all[q[0]]&&all[q[0]].length);
+  const intro=`<p class="mute" style="margin-top:0">Every time you enter a gauge reading, a dipstick reading or a sealant check, the app compares it with what it had estimated just before. As more readings come in, the gap should shrink. Air is compared in PSI; sealant in points of the starting dose.</p>`;
+  if(!has.length)return `<div class="card"><h3 style="margin-top:0">Estimate versus what you entered</h3>${intro}<p class="mute" style="margin:0">Nothing to compare yet. Enter a gauge reading at least half a day after a fill, a dipstick reading, or a sealant check.</p></div>`;
+  const W=320,H=170,L=34,R=8,T=12,B=26,srs=has.map(q=>({q,r:cmpRolling(all[q[0]],5)})),ms0=Math.min(...srs.map(s=>s.r[0].ms)),ms1=Math.max(Date.now(),...srs.map(s=>s.r[s.r.length-1].ms)),mx=Math.max(2,...srs.map(s=>Math.max(...s.r.map(x=>x.v)))),top=Math.ceil(mx),
+    X=ms=>L+(W-L-R)*(ms1===ms0?0.5:(ms-ms0)/(ms1-ms0)),Y=v=>T+(H-T-B)*(1-v/top);
+  const lines=srs.map(({q,r})=>`<path d="${r.map((x,i)=>`${i?'L':'M'}${X(x.ms).toFixed(1)},${Y(x.v).toFixed(1)}`).join(' ')}" fill="none" stroke="${q[2]}" stroke-width="2.5" ${q[3]?`stroke-dasharray="${q[3]}"`:''}/>`+r.map(x=>`<circle cx="${X(x.ms).toFixed(1)}" cy="${Y(x.v).toFixed(1)}" r="3" fill="${q[2]}"/>`).join('')).join('');
+  const grid=[0,1,2,3,4,5].filter(v=>v<=top).map(v=>`<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W-R}" y2="${Y(v).toFixed(1)}" stroke="var(--line)"/><text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">${v}×</text>`).join('');
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Average miss, as a multiple of the target, over time for front and rear air and sealant" style="display:block">${grid}<line x1="${L}" y1="${Y(1).toFixed(1)}" x2="${W-R}" y2="${Y(1).toFixed(1)}" stroke="var(--green,#2a9d4b)" stroke-dasharray="4 3" stroke-width="1.5"/><text x="${W-R}" y="${(Y(1)-3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--green,#2a9d4b)">at target</text>${lines}<text x="${L}" y="${H-6}" font-size="10" fill="var(--mute)">${fmtD(ms0)}</text><text x="${W-R}" y="${H-6}" text-anchor="end" font-size="10" fill="var(--mute)">${fmtD(ms1)}</text></svg>`;
+  const legend=has.map(q=>`<span style="white-space:nowrap"><b style="color:${q[2]}">${q[3]?'┅┅':'━━'}</b> ${q[1]}</span>`).join(' · ');
+  const f1=v=>(Math.round(v*10)/10),unit=id=>id.endsWith('air')?' PSI':' pts';
+  const rows=has.map(q=>{const P=all[q[0]],st=cmpStats(P);return `<tr><td>${q[1]}</td><td>${st.n}</td><td>${f1(st.mae)}${unit(q[0])}</td><td>${st.bias>0?'+':''}${f1(st.bias)}${unit(q[0])}</td><td>${Math.round(100*st.within/st.n)}%</td><td>${st.first!=null?`${f1(st.first)} → ${f1(st.last)}${unit(q[0])}, ${st.trend}`:st.trend}</td></tr>`}).join('');
+  return `<div class="card"><h3 style="margin-top:0">Estimate versus what you entered</h3>${intro}${svg}<p class="mute" style="margin:4px 0 0">Each line is the average miss over the last 5 entries, divided by the target (2 PSI for air; one dipstick notch, or 15 points for a check level, for sealant). Lower is better, and 1× means right at the target. ${legend}</p>
+  <div class="scroll"><table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:8px"><thead><tr style="text-align:left"><th>Series</th><th>Entries</th><th>Average miss</th><th>Bias (app minus you)</th><th>Within target</th><th>First half → latest half</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="mute" style="margin:6px 0 0">Bias above zero means the app reads high. "Closer" needs at least 6 entries and an average miss at least 10% smaller than the first half. Everything here is in the CSV export, one row per comparison (record: comparison), so you can analyze it after importing.</p></div>`}
 function viewTrends(){
   const t=S.tires[trI]||S.tires[0],nowMs=Date.now();
   const km=S.rides.filter(r=>r.startMs>=t.sealant.dateMs).reduce((a,r)=>a+(r.km||0),0);
@@ -1344,6 +1387,7 @@ function viewTrends(){
   <div style="margin-top:8px">${segBar([['w','Week'],['m','Month'],['q','3 months'],['y','Year'],['all','All']],trRange,'data-trr')}</div>
   ${airTrendCard(t)}
   ${sealTrendCard(t)}
+  ${cmpCard()}
   <div class="stat"><span class="mute">Last refill</span><br><b>${fmtD(t.sealant.dateMs)}</b></div>
   <div class="stat"><span class="mute">Since refill</span><br><b>${dR(km)} ${dU()}</b></div>
   <div class="stat" style="background:var(--line)"><span class="mute">The estimate gets better as confirmed refills and sealant checks add up. Log them in Settings, Log.</span></div>`;
@@ -1520,9 +1564,9 @@ document.addEventListener('click',async ev=>{
     if(pv===''&&!lv&&dn===''){msg['h'+k]='Enter a pressure, pick a sealant level, enter dipstick notches, or any of them.';return render(true)}
     if(dn!==''){const nn=Math.round(+dn);if(!(nn>=0&&nn<=99)){msg['h'+k]='Enter the number of notches that are wet on the dipstick.';return render(true)}
       dc=dipCompare(t,nn,Date.now());if(!dc){msg['h'+k]='Set the dipstick baseline in Details first.';return render(true)}}   // compared before any check below, so the estimate is the app's own
-    if(pv!==''){t.fills.push({dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});done.push('air '+v+' PSI')}
+    if(pv!==''){fillPushEst(t,{dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});done.push('air '+v+' PSI')}
     if(dc){(t.dipReadings=t.dipReadings||[]).push(dc);done.push('dipstick '+dc.notch+' of '+dc.baseNotch+' (app '+Math.round(dc.estPct*100)+'% vs dipstick '+Math.round(dc.dipPct*100)+'%)')}
-    if(lv){t.checks.push({dateMs:Date.now(),level:lv});done.push('sealant "'+lv+'"')}
+    if(lv){checkPushEst(t,{dateMs:Date.now(),level:lv});done.push('sealant "'+lv+'"')}
     S.example=false;msg['h'+k]='Saved '+done.join(' and ')+'.';save();render(true)}
   else if(act==='dipbase'){const i=+b.dataset.i,t=S.tires[i],n=Math.round(+$('#db'+i).value);if(!(n>=1&&n<=99)){msg['dip'+i]='Enter how many notches are wet with the full starting amount (1 or more).';return render(true)}
     const ms=Date.now();t.dip={baseNotch:n,baseMl:Math.round(Math.max(0,sealantStateFor(t,S.rides,ms).leftMl)*10)/10,baseMs:ms,sealMs:t.sealant.dateMs};msg['dip'+i]='Baseline saved: '+n+' notches = full.';save();render(true)}
@@ -1532,16 +1576,16 @@ document.addEventListener('click',async ev=>{
   else if(act==='dipundo'){const i=+b.dataset.i,t=S.tires[i],L=(t.dipReadings||[]).filter(r=>r.sealMs===t.sealant.dateMs);if(L.length){const last=L.reduce((a,r)=>r.ms>a.ms?r:a);t.dipReadings=t.dipReadings.filter(r=>r!==last);msg['dip'+i]='Last reading deleted.';save()}render(true)}
   else if(act==='dipreset'){const i=+b.dataset.i,t=S.tires[i];t.dip=null;msg['dip'+i]='Enter the notch count for the full starting amount.';save();render(true)}
   else if(act==='gauge'){const t=S.tires[+b.dataset.i],v=Math.round(parseFloat($('#gp').value)*10)/10;if(!(v>0&&v<200)){msg.gauge='Enter the pressure on your gauge, in PSI.';return render(true)}
-    t.fills.push({dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.gauge='Saved. The estimate now starts from '+v+' PSI.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render(true)}
+    fillPushEst(t,{dateMs:fillStamp(t),beforePsi:v,afterPsi:v,fillC:rideC()!=null?rideC():20,altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.gauge='Saved. The estimate now starts from '+v+' PSI.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render(true)}
   else if(act==='logair'){const t=tire(),af=parseFloat($('#la').value),be=parseFloat($('#lb').value);if(isNaN(af)&&isNaN(be)){msg.log='Enter the reading or the pressure after filling.';return render()}
-    t.fills.push({dateMs:dateMs(),beforePsi:isNaN(be)?null:be,afterPsi:isNaN(af)?be:af,fillC:(()=>{const x=parseFloat($('#lc').value);return isNaN(x)?20:tC(x)})(),altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.log='Air entry saved.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render()}
+    fillPushEst(t,{dateMs:dateMs(),beforePsi:isNaN(be)?null:be,afterPsi:isNaN(af)?be:af,fillC:(()=>{const x=parseFloat($('#lc').value);return isNaN(x)?20:tC(x)})(),altM:now.elevation!=null?now.elevation:(S.home&&S.home.altM)||0});S.example=false;msg.log='Air entry saved.';delete alSeen[t.wheel+':airlow'];delete alSeen[t.wheel+':airhigh'];save();render()}
   else if(act==='sealpast'){const i=+b.dataset.i,t=S.tires[i],dv=$('#sp_d').value,ml=vIn(parseFloat($('#sp_a').value)),br=($('#sp_b').value||'').trim();
     if(!dv||!(ml>0)){msg.sp='Enter the date and how much sealant went in.';return render(true)}
     const d=toMs(dv);if(d>=t.sealant.dateMs){msg.sp='That is not before your current refill ('+fmtD(t.sealant.dateMs)+'). Use Log, Sealant added for a newer one.';return render(true)}
     t.sealHist=t.sealHist||[];if(t.sealHist.some(h=>Math.abs(h.dateMs-d)<DAY&&h.brand===br)){msg.sp='That refill is already in the history.';return render(true)}
     t.sealHist.push({brand:br,ml:Math.round(ml),dateMs:d,events:[],endMs:null,addedMl:Math.round(ml*10)/10});t.sealHist.sort((a,c)=>a.dateMs-c.dateMs);t.sealHist.forEach((h,k)=>{h.endMs=k<t.sealHist.length-1?t.sealHist[k+1].dateMs:t.sealant.dateMs});
     if(br)addCustomSealant(br);msg.sp='Added. The chart now starts from '+fmtD(t.sealHist[0].dateMs)+'.';save();render()}
-  else if(act==='logcheck'){tire().checks.push({dateMs:dateMs(),level:$('#ll').value});msg.log='Sealant check saved. The life estimate has been adjusted.';save();render()}
+  else if(act==='logcheck'){checkPushEst(tire(),{dateMs:dateMs(),level:$('#ll').value});msg.log='Sealant check saved. The life estimate has been adjusted.';save();render()}
   else if(act==='airout'){const i=+b.dataset.i,t=S.tires[i],x=tireStatus(t),amt=parseFloat($('#ao'+i).value);
     if(!x.ar.known){msg['a'+i]='Log a fill or a gauge reading first.';return render(true)}
     if(!(amt>0)){msg['a'+i]='Enter how many PSI you let out.';return render(true)}
@@ -1642,10 +1686,11 @@ const isoT=ms=>ms?new Date(ms).toISOString().slice(0,16)+'Z':'';
 const CSV_COLS=['record','date_time','wheel','tire','width_mm','nominal_width_mm','rim_width_mm','tire_type','max_psi','hookless','installed_date',
  'sealant_brand','sealant_dose_ml','sealant_applied_date','air_target_psi','air_low_line_psi','air_estimate_psi','leak_pct_per_day','sealant_estimate_ml','sealant_percent_of_full_dose',
  'air_before_psi','air_after_psi','air_change_psi','fill_temp_c','altitude_m','sealant_check_level','puncture_hole_mm','puncture_kind','sealant_lost_ml','sealant_removed_ml','air_app_estimate_psi','air_difference_psi','dipstick_notch','dipstick_base_notch','dipstick_percent','sealant_estimate_percent_of_base','difference_points','within_one_notch',
- 'ride_hours','ride_km','ride_air_c','ride_road_c','body_weight_kg','rider_kg','bike_kg','terrain','surface','traffic_speed_kmh','traffic_free_flow_kmh','traffic_road_adjust_c','note'];
+ 'ride_hours','ride_km','ride_air_c','ride_road_c','body_weight_kg','rider_kg','bike_kg','terrain','surface','traffic_speed_kmh','traffic_free_flow_kmh','traffic_road_adjust_c','series','source','estimate','entered','error','abs_error','percent_error','unit','within_target','target_tolerance','estimate_basis','entries_before','model_version','note'];
 function buildCsv(){
   const rows=[CSV_COLS],R=o=>rows.push(CSV_COLS.map(c=>o[c]==null?'':o[c])),r1=v=>v==null||isNaN(v)?'':Math.round(v*10)/10;
   const nowMs=Date.now(),own=S.rides.filter(r=>!isProv(r));
+  R({record:'model',date_time:isoT(nowMs),model_version:MODEL_V,note:JSON.stringify({q10:S.a.q10,pavementOffsetC:S.a.pavementOffsetC,learnWeight:S.a.learnWeight,leakPctPerDay:S.a.leakPctPerDay,refLifeDays:S.a.refLifeDays,roadK:S.a.roadK,dayPerKm:S.a.dayPerKm,mlPerSealEvent:S.a.mlPerSealEvent,triggerFraction:S.a.triggerFraction})});
   R({record:'rider',date_time:isoT(nowMs),rider_kg:r1(S.rider.riderKg),bike_kg:r1(S.rider.bikeKg),terrain:S.rider.terrain,surface:S.rider.surface,note:'units in this file are metric and PSI'});
   S.tires.forEach(t=>{let A=null;try{A=advice(t)}catch(e){}const full=TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel)||0,base={wheel:t.wheel,tire:`${t.brand||''} ${t.model||''}`.trim()};
     R(Object.assign({},base,{record:'tire',date_time:isoT(nowMs),width_mm:t.widthMm,nominal_width_mm:t.nominalMm,rim_width_mm:t.rimMm,tire_type:t.type,max_psi:t.maxPsi>0?t.maxPsi:'',hookless:t.hookless?'yes':'',installed_date:isoD(t.installMs),
@@ -1659,6 +1704,7 @@ function buildCsv(){
         note:d==null?'reading or fill':(Math.abs(d)<0.05?'gauge reading':(d<0?'air let out':'air added'))}))});
     if(t.dip)R(Object.assign({},base,{record:'dipstick_baseline',date_time:isoT(t.dip.baseMs),sealant_brand:t.sealant.brand,sealant_applied_date:isoD(t.dip.sealMs),sealant_estimate_ml:Math.round(t.dip.baseMl),dipstick_base_notch:t.dip.baseNotch,note:'notches wet with the full starting amount'}));
     (t.dipReadings||[]).forEach(r=>R(Object.assign({},base,{record:'dipstick',date_time:isoT(r.ms),sealant_brand:r.brand,sealant_applied_date:isoD(r.sealMs),sealant_estimate_ml:Math.round(r.estMl),dipstick_notch:r.notch,dipstick_base_notch:r.baseNotch,dipstick_percent:Math.round(r.dipPct*100),sealant_estimate_percent_of_base:Math.round(r.estPct*100),difference_points:r1(r.diffPts),within_one_notch:Math.abs(r.off)<=1?'yes':'no',note:'base amount '+Math.round(r.baseMl)+' ml; app minus dipstick'})));
+    cmpPairs(t).forEach(q=>R(Object.assign({},base,{record:'comparison',date_time:isoT(q.ms),series:q.series,source:q.source,estimate:Math.round(q.est*100)/100,entered:Math.round(q.entered*100)/100,error:Math.round(q.err*100)/100,abs_error:Math.round(Math.abs(q.err)*100)/100,percent_error:q.metric==='air'&&q.entered?Math.round(q.err/q.entered*1000)/10:'',unit:q.unit,within_target:Math.abs(q.err)<=q.tol?'yes':'no',target_tolerance:Math.round(q.tol*100)/100,estimate_basis:q.basis,entries_before:q.priorN,model_version:MODEL_V,sealant_brand:t.sealant.brand,note:'error = app estimate minus what you entered'})));
     (t.checks||[]).forEach(c=>R(Object.assign({},base,{record:'sealant_check',date_time:isoT(c.dateMs),sealant_check_level:c.level})));
     (t.sealant.events||[]).forEach(e=>R(Object.assign({},base,e.kind==='removed'?{record:'sealant_removed',date_time:isoT(e.dateMs),sealant_removed_ml:r1(e.ml)}:{record:'puncture',date_time:isoT(e.dateMs),puncture_hole_mm:e.holeMm||'',puncture_kind:e.kind||'sealed',sealant_lost_ml:r1(e.ml||S.a.mlPerSealEvent)})));
     /* trend: estimated air and sealant day by day, from the first entry to today. Built only from rides you entered or loaded from files. */
@@ -1930,7 +1976,7 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}
 pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();
 document.addEventListener('visibilitychange',()=>{if(document.hidden){alHiddenAt=Date.now();return}if(!document.hidden){if(alHiddenAt&&Date.now()-alHiddenAt>30000)alOpenCheck();alHiddenAt=0;try{if(tab==='home'&&detail===null)render(true);else checkAlerts()}catch(e){}autoLocate();autoHealth();stravaSync();syncAll()}});
 let alBeat=Date.now();setInterval(()=>{const n=Date.now();if(n-alBeat>30000&&!document.hidden)alOpenCheck();alBeat=n},2000);window.addEventListener('pageshow',ev=>{if(ev.persisted)alOpenCheck()});
-window.__TG={get S(){return S},importFiles,render,alOpenCheck,garminPayload,checkAlerts,setAck:v=>{staleAck=v}};
+window.__TG={get S(){return S},importFiles,render,alOpenCheck,garminPayload,checkAlerts,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
 })();
 
 </script>

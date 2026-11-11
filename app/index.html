@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-10 xw6';
+const BUILD='2026-11-10 xw8';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -883,16 +883,28 @@ function aiServiceCard(){const x=aiS(),m=msg.aisvc||'';
 const trf=()=>{S.traffic=S.traffic||{key:'',on:false};return S.traffic};
 /* Xweather Road Weather Conditions: a modeled road surface temperature for the road nearest your saved location, refreshed about every 15 minutes for the next 2 hours. Optional; when it works it replaces the app's own road estimate for "now". */
 const xwc=()=>{S.xw=S.xw||{id:'',secret:'',on:false};return S.xw};
-async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Error('Add your Xweather client ID and secret first.');
-  const url='https://data.api.xweather.com/roadweather/conditions/'+(Math.round(loc.lat*10000)/10000)+','+(Math.round(loc.lon*10000)/10000)+'?client_id='+encodeURIComponent(x.id)+'&client_secret='+encodeURIComponent(x.secret);
+async function xwQuery(lat,lon){const x=xwc();
+  const url='https://data.api.xweather.com/roadweather/conditions/'+(Math.round(lat*10000)/10000)+','+(Math.round(lon*10000)/10000)+'?client_id='+encodeURIComponent(x.id)+'&client_secret='+encodeURIComponent(x.secret);
   const r=await net(url);let j=null;try{j=JSON.parse(r.text)}catch(e){}
   if(r.status===401||r.status===403||(j&&j.error&&/invalid_client|unauthorized|forbidden|usage/i.test(String(j.error.code||''))))throw new Error('Xweather did not accept that ID and secret'+(j&&j.error&&j.error.description?' ('+j.error.description+')':'')+'.');
   if(r.status===429)throw new Error('Xweather says too many requests. Try again later.');
+  if(j&&j.error&&j.error.code==='warn_no_data'){const e=new Error('nodata');e.nodata=true;throw e}
   if(!j||!j.success)throw new Error('Xweather: '+((j&&j.error&&(j.error.description||j.error.code))||('error '+r.status))+'.');
-  const rp=Array.isArray(j.response)?j.response[0]:j.response,per=(rp&&rp.periods)||[];if(!per.length)throw new Error('[xw6] No road readings came back. Xweather replied: '+String(r.text||'').replace(/client_(id|secret)=[^&"\s]*/g,'').replace(/\s+/g,' ').slice(0,300));
+  const rp=Array.isArray(j.response)?j.response[0]:j.response,per=(rp&&rp.periods)||[];
+  if(!per.length){const e=new Error('nodata');e.nodata=true;e.raw=String(r.text||'').replace(/client_(id|secret)=[^&"\s]*/g,'').replace(/\s+/g,' ').slice(0,200);throw e}
   const nowS=Date.now()+15*60e3;let cur=per[0];per.forEach(q=>{if(q.timestamp*1000<=nowS&&q.roadSurface&&q.roadSurface.tempC!=null)cur=q});
   if(!cur.roadSurface||cur.roadSurface.tempC==null)throw new Error('Xweather returned no road temperature for this spot.');
   return {tempC:cur.roadSurface.tempC,cond:cur.roadSurface.condition||'',road:(rp.road&&rp.road.name)||'',periodMs:cur.timestamp*1000,ms:Date.now()}}
+/* Xweather only answers for points near roads in its network. If the saved location is not near one, try a ring of points about 1 km out (one request at a time, stop at the first hit) and remember the spot that worked so later checks cost one request. */
+async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Error('Add your Xweather client ID and secret first.');
+  const near=(p)=>p&&Math.abs(p.lat-loc.lat)<0.02&&Math.abs(p.lon-loc.lon)<0.02;
+  if(x.noRoad&&near(x.noRoad)&&Date.now()-x.noRoad.ms<30*60e3)throw new Error(x.noRoad.msg);
+  const pts=[];if(near(x.snap))pts.push(x.snap);pts.push({lat:loc.lat,lon:loc.lon});
+  const dk=0.009,dl=0.009/Math.max(0.2,Math.cos(loc.lat*Math.PI/180));
+  [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(d=>pts.push({lat:loc.lat+d[0]*dk,lon:loc.lon+d[1]*dl}));
+  let tried=0;for(const p of pts){tried++;try{const q=await xwQuery(p.lat,p.lon);if(!near(x.snap)||x.snap.lat!==p.lat||x.snap.lon!==p.lon){x.snap={lat:p.lat,lon:p.lon};save()}x.noRoad=null;return q}catch(e){if(!e.nodata)throw e}}
+  if(x.snap)x.snap=null;const msg='Xweather has no road data within about 1 km of your saved location ('+tried+' spots tried). Set your location to a spot on a main road you ride, in Location and weather above, then check again. The app waits 30 minutes before trying again.';x.noRoad={lat:loc.lat,lon:loc.lon,ms:Date.now(),msg};save();
+  throw new Error(msg)}
 async function trafficFlow(loc){const x=trf();if(!x.key)throw new Error('Add a TomTom key first.');
   const pt=(Math.round(loc.lat*1000)/1000)+','+(Math.round(loc.lon*1000)/1000);
   const r=await net('https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?key='+encodeURIComponent(x.key)+'&point='+pt+'&unit=kmph');
@@ -1620,7 +1632,7 @@ document.addEventListener('click',async ev=>{
     t.sealant.events.push({dateMs:evStamp(t),ml:Math.round(ml*10)/10,kind:'removed'});S.example=false;
     const st=sealantStateFor(t,S.rides,Date.now());msg['a'+i]=sealChange(t,b0,st.leftMl,'removed');save();render(true)}
   else if(act==='aitest'){msg.aisvc='Testing…';render(true);try{const r=await aiProxy('/health',{method:'GET'});const j=r.j;msg.aisvc=!j||!j.ok?'That address did not answer like a TyreGuru service (status '+r.status+').':(j.configured?'Connected and switched on.'+(j.codeRequired&&!aiS().code?' It wants an access code.':''):'Connected. The service is deployed but has no key yet, so reviews stay off until you add one.')}catch(err){msg.aisvc='Could not reach it: '+err.message}render(true)}
-  else if(act==='xwnow'){xwc().on=true;save();msg.now='Looking up…';render(true);await fetchNow();render(true)}
+  else if(act==='xwnow'){xwc().on=true;xwc().noRoad=null;save();msg.now='Looking up…';render(true);await fetchNow();render(true)}
   else if(act==='trafficnow'){msg.now='Looking up…';render(true);await fetchNow();render(true)}
   else if(act==='puncsave'){const i=+b.dataset.i,t=S.tires[i],d=pdraft(i),inp=$('#pm'+i),mlv=inp&&inp.value!==''?vIn(parseFloat(inp.value)):puncMl(t,d.hole,d.kind);
     if(!(mlv>=0)||isNaN(mlv)){msg['p'+i]='Enter the sealant lost, in '+vU()+'.';return render(true)}
@@ -1644,7 +1656,7 @@ document.addEventListener('focusin',ev=>{const e=ev.target;if(e&&e.tagName==='IN
 document.addEventListener('input',ev=>{
   const e=ev.target;
   if(e&&e.dataset&&(e.dataset.aiu||e.dataset.aic)){const x=aiS();if(e.dataset.aiu)x.url=e.value.trim();else x.code=e.value.trim();save();flushSubs();const bt=document.querySelector('[data-act=aitest]');if(bt)bt.disabled=!aiUrl();return}
-  if(e&&e.dataset&&e.dataset.xw){xwc()[e.dataset.xw]=e.value.trim();save();const bx=document.querySelector('[data-act=xwnow]');if(bx)bx.disabled=!(xwc().id&&xwc().secret&&S.home);return}
+  if(e&&e.dataset&&e.dataset.xw){xwc()[e.dataset.xw]=e.value.trim();xwc().noRoad=null;save();const bx=document.querySelector('[data-act=xwnow]');if(bx)bx.disabled=!(xwc().id&&xwc().secret&&S.home);return}
   if(e&&e.dataset&&e.dataset.tk){trf().key=e.value.trim();save();const bt=document.querySelector('[data-act=trafficnow]');if(bt)bt.disabled=!(trf().key&&S.home);return}
   if(e&&e.dataset&&e.dataset.pml!==undefined){const d=pdraft(+e.dataset.pml),x=parseFloat(e.value);d.ml=isNaN(x)?null:vIn(x);return}
   /* brand field: typing a space finishes the word from the brand list ("P" + space becomes "Pirelli ") */

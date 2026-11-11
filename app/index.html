@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-10 xw8';
+const BUILD='2026-11-11 xw9';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -883,8 +883,8 @@ function aiServiceCard(){const x=aiS(),m=msg.aisvc||'';
 const trf=()=>{S.traffic=S.traffic||{key:'',on:false};return S.traffic};
 /* Xweather Road Weather Conditions: a modeled road surface temperature for the road nearest your saved location, refreshed about every 15 minutes for the next 2 hours. Optional; when it works it replaces the app's own road estimate for "now". */
 const xwc=()=>{S.xw=S.xw||{id:'',secret:'',on:false};return S.xw};
-async function xwQuery(lat,lon){const x=xwc();
-  const url='https://data.api.xweather.com/roadweather/conditions/'+(Math.round(lat*10000)/10000)+','+(Math.round(lon*10000)/10000)+'?client_id='+encodeURIComponent(x.id)+'&client_secret='+encodeURIComponent(x.secret);
+async function xwQuery(idStr){const x=xwc();
+  const url='https://data.api.xweather.com/roadweather/conditions/'+encodeURI(idStr)+'?client_id='+encodeURIComponent(x.id)+'&client_secret='+encodeURIComponent(x.secret);
   const r=await net(url);let j=null;try{j=JSON.parse(r.text)}catch(e){}
   if(r.status===401||r.status===403||(j&&j.error&&/invalid_client|unauthorized|forbidden|usage/i.test(String(j.error.code||''))))throw new Error('Xweather did not accept that ID and secret'+(j&&j.error&&j.error.description?' ('+j.error.description+')':'')+'.');
   if(r.status===429)throw new Error('Xweather says too many requests. Try again later.');
@@ -902,7 +902,8 @@ async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Err
   const pts=[];if(near(x.snap))pts.push(x.snap);pts.push({lat:loc.lat,lon:loc.lon});
   const dk=0.009,dl=0.009/Math.max(0.2,Math.cos(loc.lat*Math.PI/180));
   [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(d=>pts.push({lat:loc.lat+d[0]*dk,lon:loc.lon+d[1]*dl}));
-  let tried=0;for(const p of pts){tried++;try{const q=await xwQuery(p.lat,p.lon);if(!near(x.snap)||x.snap.lat!==p.lat||x.snap.lon!==p.lon){x.snap={lat:p.lat,lon:p.lon};save()}x.noRoad=null;return q}catch(e){if(!e.nodata)throw e}}
+  let tried=0;const pl=(x.place||'').trim();if(pl){tried++;try{const q=await xwQuery(pl);x.noRoad=null;return q}catch(e){if(!e.nodata)throw e}}
+  for(const p of pts){tried++;try{const q=await xwQuery((Math.round(p.lat*10000)/10000)+','+(Math.round(p.lon*10000)/10000));if(!near(x.snap)||x.snap.lat!==p.lat||x.snap.lon!==p.lon){x.snap={lat:p.lat,lon:p.lon};save()}x.noRoad=null;return q}catch(e){if(!e.nodata)throw e}}
   if(x.snap)x.snap=null;const msg='Xweather has no road data within about 1 km of your saved location ('+tried+' spots tried). Set your location to a spot on a main road you ride, in Location and weather above, then check again. The app waits 30 minutes before trying again.';x.noRoad={lat:loc.lat,lon:loc.lon,ms:Date.now(),msg};save();
   throw new Error(msg)}
 async function trafficFlow(loc){const x=trf();if(!x.key)throw new Error('Add a TomTom key first.');
@@ -924,6 +925,7 @@ function xweatherCard(){const x=xwc(),q=now.xweather;
   const line=q?(q.err?esc(q.err):`Road surface ${tF(q.tempC).toFixed(0)} ${tU()}${q.cond?' ('+esc(q.cond.toLowerCase())+')':''}${q.road?' on '+esc(q.road):''}, checked ${new Date(q.ms).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}. The app's own estimate was ${now.roadEstC!=null?tF(now.roadEstC).toFixed(0)+' '+tU():'not available'}.`):(S.home?'':'Set your location first (Data, above).');
   return `<div class="card"><h2>Road temperature from Xweather</h2><p class="mute" style="margin-top:0">Optional. Xweather's Road Weather Conditions gives a modeled road surface temperature for the road nearest your saved location, refreshed about every 15 minutes. When it works, the app uses it instead of its own road estimate and sends it to the Garmin data field. It is a model, not a sensor at your spot, and covers North America, Europe, Japan, Australia and New Zealand. Create a free Xweather account at xweather.com to get a client ID and secret (15,000 requests a month at the time of writing).</p>
   <div class="row"><div><label for="xwi">Xweather client ID</label><input id="xwi" data-xw="id" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(x.id||'')}"></div><div><label for="xws">Xweather client secret</label><input id="xws" type="password" data-xw="secret" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(x.secret||'')}"></div></div>
+  <div class="row" style="margin-top:8px"><div><label for="xwp">Road location (optional): a street address, ZIP code or lat,lon on the road you ride</label><input id="xwp" data-xw="place" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="5606 N Lamar Blvd, Austin, TX" value="${esc(x.place||'')}"></div></div>
   <div class="row" style="margin-top:8px"><div><label for="xwo">Use Xweather road temperature</label><select id="xwo" data-xwon="1"><option value="1"${x.on?' selected':''}>On</option><option value="0"${!x.on?' selected':''}>Off</option></select></div></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button data-act="xwnow"${x.id&&x.secret&&S.home?'':' disabled'}>Check road temperature now</button></div>
   <p class="mute" id="xwmsg" aria-live="polite" style="margin:8px 0 0">${line}</p></div>`}
@@ -962,7 +964,7 @@ function viewData(){
   ${oauthCard('withings')}
   ${oauthCard('whoop')}
   ${garminCard()}
-  <div class="card"><h2>Location and weather</h2><p class="mute" style="margin-top:0">The app finds your location from this device by itself when it opens and uses it for the weather. Allow location when asked. You only need to type a town if location is off.</p><div class="row"><div><label for="place">Town or ZIP (only if location is off)</label><input id="place" value="${esc(S.home?S.home.label:'')}" placeholder="Austin, TX"></div><div style="align-self:end;display:flex;gap:6px"><button data-act="geo">Find</button><button class="ghost" data-act="gps">Refresh location</button></div></div>
+  <div class="card"><h2>Location and weather</h2><p class="mute" style="margin-top:0">The app finds your location from this device by itself when it opens and uses it for the weather. Allow location when asked. You only need to type a town if location is off.</p><div class="row"><div><label for="place">Town, ZIP or lat, lon (only if location is off)</label><input id="place" value="${esc(S.home?S.home.label:'')}" placeholder="Austin, TX or lat, lon"></div><div style="align-self:end;display:flex;gap:6px"><button data-act="geo">Find</button><button class="ghost" data-act="gps">Refresh location</button></div></div>
   <p class="mute" id="lmsg" aria-live="polite">${esc(msg.loc||(S.home?(S.home.gps?`Location found automatically: ${S.home.label}.`:`Using ${S.home.label} (${S.home.lat.toFixed(2)}, ${S.home.lon.toFixed(2)}).`):'Looking for your location. If nothing appears, location is off or blocked here. Type a town below. Rides from .fit files carry their own GPS start point.'))}</p>
   <button data-act="enrich">Look up temperature and road temperature for my rides</button><p class="mute" id="emsg" aria-live="polite">${esc(msg.enr||'')}</p></div>
   ${xweatherCard()}
@@ -1581,7 +1583,7 @@ document.addEventListener('click',async ev=>{
   else if(act==='srcsync'){await srcSync(b.dataset.k,true)}
   else if(act==='srcdisc'){const k=b.dataset.k,c=OAUTHS[k],x=sx(k);S.src[k]={id:x.id,secret:x.secret};S.weights=S.weights.filter(w=>w.src!==c.name);autoWeight();msg['s_'+k]='Disconnected. '+c.name+' data removed from this app.';save();render()}
   else if(act==='nowwx'){try{if(!S.home)throw new Error('Set a location in Settings, Data first.');msg.now='Looking up…';render();const c=await nowWithTraffic();Object.assign(now,c);msg.now='';}catch(e){msg.now=netErr(e)}render()}
-  else if(act==='geo'){const v=$('#place').value.trim();if(!v)return;try{msg.loc='Searching…';render();const p=await ENV.geocode(v);S.home=Object.assign(p,{manual:true});msg.loc='';save();fetchNow()}catch(e){msg.loc=netErr(e)}render()}
+  else if(act==='geo'){const v=$('#place').value.trim();if(!v)return;try{msg.loc='Searching…';render();const cm=v.match(/^(-?\d{1,2}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)$/);const p=cm&&Math.abs(+cm[1])<=90&&Math.abs(+cm[2])<=180?{lat:+cm[1],lon:+cm[2],altM:(S.home&&S.home.altM)||null,label:'your coordinates'}:await ENV.geocode(v);S.home=Object.assign(p,{manual:true});msg.loc='';save();fetchNow()}catch(e){msg.loc=netErr(e)}render()}
   else if(act==='gps'){await autoLocate(true)}
   else if(act==='enrich'){try{if(!S.home&&!S.rides.some(r=>r.lat!=null))throw new Error('Set a location first.');msg.enr='Working…';render();const r=await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,(d,f,t)=>{msg.enr=`${d} of ${t} rides done`;});msg.enr=`Added weather to ${r.done} of ${r.total} rides${r.fail?`. ${r.fail} could not be looked up (no connection or no data).`:'.'}`;save()}catch(e){msg.enr=netErr(e)}render()}
   else if(act==='logride'){const d=parseFloat($('#rm').value);if(!(d>0)){msg.ride='Enter the distance you rode.';return render(true)}

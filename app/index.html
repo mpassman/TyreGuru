@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-10 xw3';
+const BUILD='2026-11-10 xw4';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -925,21 +925,7 @@ function trafficCard(){const x=trf(),t=now.traffic;
 function viewData(){
   const nR=S.rides.length,wx=S.rides.filter(r=>r.roadC!=null).length;
   const rows=S.rides.slice().sort((a,b)=>b.startMs-a.startMs).slice(0,8).map(r=>`<tr><td>${fmtD(r.startMs)}</td><td>${r.hours.toFixed(1)} h</td><td>${r.km!=null?dR(r.km)+' '+dU():'–'}</td><td>${r.tempC!=null?Math.round(tF(r.tempC))+' '+tU():'–'}</td><td>${r.roadC!=null?Math.round(tF(r.roadC))+' '+tU():'–'}</td><td>${esc(r.source)}</td></tr>`).join('');
-  return `<div class="card"><h2>Import your data</h2>
-  <p class="mute" style="margin-top:0">Choose files from your phone or computer. Several at once is fine. The app reads them on your device and does not upload them.</p>
-  <label for="files">Garmin ride files (.fit), Garmin Connect activities list (.csv), Apple Health export (.xml or export.zip), weight list (.csv)</label>
-  <input id="files" type="file" multiple accept=".fit,.csv,.xml,.zip">
-  <p class="mute" id="imsg" aria-live="polite">${esc(msg.imp||'')}${msg.health?' · '+esc(msg.health):''}</p>
-  <details><summary>How to get these files</summary><div class="mute"><b>Garmin:</b> on connect.garmin.com open Activities, filter to Cycling, choose Export CSV for the list. For one ride, open it, then the gear menu, then Export Original, which gives a .fit file. Garmin does not offer a public live connection for individual apps, so the app reads exports instead.<br><b>Apple Health:</b> on iPhone open Health, tap your picture, then Export All Health Data. Share the zip to Files, then pick it here. Large exports take a minute. Apple does not let a web page read Health directly. A native iPhone app would be needed for a live link.<br><b>Weight list:</b> a CSV with columns Date and Weight (add kg or lb to the header).</div></details></div>
-  ${stravaCard()}
-  ${icuCard()}
-  ${oauthCard('withings')}
-  ${oauthCard('whoop')}
-  ${garminCard()}
-  <div class="card"><h2>Location and weather</h2><p class="mute" style="margin-top:0">The app finds your location from this device by itself when it opens and uses it for the weather. Allow location when asked. You only need to type a town if location is off.</p><div class="row"><div><label for="place">Town or ZIP (only if location is off)</label><input id="place" value="${esc(S.home?S.home.label:'')}" placeholder="Austin, TX"></div><div style="align-self:end;display:flex;gap:6px"><button data-act="geo">Find</button><button class="ghost" data-act="gps">Refresh location</button></div></div>
-  <p class="mute" id="lmsg" aria-live="polite">${esc(msg.loc||(S.home?(S.home.gps?`Location found automatically: ${S.home.label}.`:`Using ${S.home.label} (${S.home.lat.toFixed(2)}, ${S.home.lon.toFixed(2)}).`):'Looking for your location. If nothing appears, location is off or blocked here. Type a town below. Rides from .fit files carry their own GPS start point.'))}</p>
-  <button data-act="enrich">Look up temperature and road temperature for my rides</button><p class="mute" id="emsg" aria-live="polite">${esc(msg.enr||'')}</p></div>
-  <div class="card"><h2>Data sources</h2>
+  return `<div class="card"><h2>Data sources</h2>
   ${srcRow('Garmin files','ok',`${S.rides.filter(r=>/Garmin/.test(r.source)).length} rides imported`)}
   ${srcRow('Apple Health file','ok',`${S.rides.filter(r=>r.source==='Apple Health').length} rides, ${S.weights.length} weights imported`)}
   ${srcRow('Weather and elevation (Open-Meteo)',wx?'ok':'no',`${wx} of ${nR} rides have weather. Needs internet and a copy of the app that is allowed to call it`)}
@@ -954,6 +940,20 @@ function viewData(){
   ${srcRow('Fitbit, Wahoo, RideWithGPS, Komoot, TrainingPeaks','no','Not offered. Fitbit ended its old interface on 30 Sep 2026. The others need partner approval or have no public access')}
   ${srcRow('TyreGuru sensor','no','Planned. Until then you enter gauge readings and sealant checks by hand')}
   ${srcRow('AI review (Claude)',aiUrl()?'ok':'no',aiUrl()?'Sent through your AI review service when this page is not inside Claude':'Works inside Claude. For this app by itself, add a service address below')}</div>
+  <div class="card"><h2>Import your data</h2>
+  <p class="mute" style="margin-top:0">Choose files from your phone or computer. Several at once is fine. The app reads them on your device and does not upload them.</p>
+  <label for="files">Garmin ride files (.fit), Garmin Connect activities list (.csv), Apple Health export (.xml or export.zip), weight list (.csv)</label>
+  <input id="files" type="file" multiple accept=".fit,.csv,.xml,.zip">
+  <p class="mute" id="imsg" aria-live="polite">${esc(msg.imp||'')}${msg.health?' · '+esc(msg.health):''}</p>
+  <details><summary>How to get these files</summary><div class="mute"><b>Garmin:</b> on connect.garmin.com open Activities, filter to Cycling, choose Export CSV for the list. For one ride, open it, then the gear menu, then Export Original, which gives a .fit file. Garmin does not offer a public live connection for individual apps, so the app reads exports instead.<br><b>Apple Health:</b> on iPhone open Health, tap your picture, then Export All Health Data. Share the zip to Files, then pick it here. Large exports take a minute. Apple does not let a web page read Health directly. A native iPhone app would be needed for a live link.<br><b>Weight list:</b> a CSV with columns Date and Weight (add kg or lb to the header).</div></details></div>
+  ${stravaCard()}
+  ${icuCard()}
+  ${oauthCard('withings')}
+  ${oauthCard('whoop')}
+  ${garminCard()}
+  <div class="card"><h2>Location and weather</h2><p class="mute" style="margin-top:0">The app finds your location from this device by itself when it opens and uses it for the weather. Allow location when asked. You only need to type a town if location is off.</p><div class="row"><div><label for="place">Town or ZIP (only if location is off)</label><input id="place" value="${esc(S.home?S.home.label:'')}" placeholder="Austin, TX"></div><div style="align-self:end;display:flex;gap:6px"><button data-act="geo">Find</button><button class="ghost" data-act="gps">Refresh location</button></div></div>
+  <p class="mute" id="lmsg" aria-live="polite">${esc(msg.loc||(S.home?(S.home.gps?`Location found automatically: ${S.home.label}.`:`Using ${S.home.label} (${S.home.lat.toFixed(2)}, ${S.home.lon.toFixed(2)}).`):'Looking for your location. If nothing appears, location is off or blocked here. Type a town below. Rides from .fit files carry their own GPS start point.'))}</p>
+  <button data-act="enrich">Look up temperature and road temperature for my rides</button><p class="mute" id="emsg" aria-live="polite">${esc(msg.enr||'')}</p></div>
   ${xweatherCard()}
   ${aiServiceCard()}
   <div class="card"><h2>Rides</h2><p class="mute" style="margin-top:0">${nR} rides, newest first (showing up to 8).</p><div class="scroll"><table><thead><tr><th>Date</th><th>Time</th><th>Distance</th><th>Air</th><th>Road est.</th><th>From</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No rides yet.</td></tr>'}</tbody></table></div></div>`;

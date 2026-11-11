@@ -504,10 +504,9 @@ class TireGuruField extends WatchUi.DataField {
         gBands(dc, cx, cy, k, dmax, zones);
         gTicks(dc, cx, cy, k);
         gNumbers(dc, cx, cy, k, dmax);
-        if (alt != null) { gInner(dc, cx, cy, k, dmax, alt); }
         if (tgt > 0.0) { gTarget(dc, cx, cy, k, dmax, tgt); }
         gNeedle(dc, cx, cy, k, dmax, v);
-        gHub(dc, cx, cy, k, unit, alt);
+        gHub(dc, cx, cy, k, unit, null);   // no inner bar / ml scale or label: less clutter
     }
 
     function gFace(dc, cx, cy, rad) {

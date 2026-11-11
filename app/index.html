@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-11 xw10';
+const BUILD='2026-11-11 A1';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -908,6 +908,20 @@ async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Err
   for(const p of pts){tried++;try{const q=await xwQuery((Math.round(p.lat*10000)/10000)+','+(Math.round(p.lon*10000)/10000));if(!near(x.snap)||x.snap.lat!==p.lat||x.snap.lon!==p.lon){x.snap={lat:p.lat,lon:p.lon};save()}x.noRoad=null;return q}catch(e){if(!e.nodata)throw e}}
   if(x.snap)x.snap=null;const msg='Xweather has no road data within about 1 km of your saved location ('+tried+' spots tried). Set your location to a spot on a main road you ride, in Location and weather above, then check again. The app waits 30 minutes before trying again.';x.noRoad={lat:loc.lat,lon:loc.lon,ms:Date.now(),msg};save();
   throw new Error(msg)}
+/* Road temperature log (Option A): every "now" reading the app takes is saved (one per 15 min, 14 days). A ride then uses the Xweather readings taken during it (or within 20 min either side); with none, it keeps the app's own estimate. The app can only record while it is open. */
+const RL_KEEP=14*864e5,RL_GAP=15*60e3,RL_PAD=20*60e3;
+function roadLog(){S.roadLog=S.roadLog||[];return S.roadLog}
+function logRoad(c){if(S.example||!c||c.airC==null)return;const L=roadLog(),t=Date.now();while(L.length&&t-L[0].ms>RL_KEEP)L.shift();const last=L[L.length-1];
+  const xw=c.xweather&&!c.xweather.err&&c.xweather.tempC!=null?c.xweather.tempC:null;
+  const est=c.roadEstC!=null?c.roadEstC:(c.roadBaseC!=null?c.roadBaseC:c.roadC);
+  if(last&&t-last.ms<RL_GAP){if(last.xw==null&&xw!=null){last.xw=xw;last.est=est;last.air=c.airC}return}
+  L.push({ms:t,xw,est:est!=null?est:null,air:c.airC})}
+function applyRoadLog(){const L=roadLog();if(!L.length)return false;let ch=false;
+  S.rides.forEach(r=>{if(r.roadSrc==='entered')return;const a=r.startMs-RL_PAD,b=r.startMs+(r.hours||0)*3600e3+RL_PAD;
+    const xs=L.filter(e=>e.xw!=null&&e.ms>=a&&e.ms<=b);if(!xs.length)return;
+    const m=Math.round(xs.reduce((q,e)=>q+e.xw,0)/xs.length*10)/10;
+    if(r.roadSrc!=='xweather'||r.roadC!==m||r.roadN!==xs.length){if(r.roadSrc!=='xweather'&&r.roadEstC==null&&r.roadC!=null)r.roadEstC=r.roadC;r.roadC=m;r.roadSrc='xweather';r.roadN=xs.length;ch=true}});
+  return ch}
 async function trafficFlow(loc){const x=trf();if(!x.key)throw new Error('Add a TomTom key first.');
   const pt=(Math.round(loc.lat*1000)/1000)+','+(Math.round(loc.lon*1000)/1000);
   const r=await net('https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?key='+encodeURIComponent(x.key)+'&point='+pt+'&unit=kmph');
@@ -923,6 +937,8 @@ async function nowWithTraffic(){const c=await ENV.nowConditions(S.home,S.rider.s
       c.roadBaseC=c.roadC;c.roadC=c.roadC+adj;c.traffic={cur:f.cur,free:f.free,cong,adj,ms:f.ms,conf:f.conf}}catch(e){c.traffic={err:e.message}}}
   return c}
 function trafficLine(){const t=now.traffic;if(!t)return '';if(t.err)return ' · traffic: '+esc(t.err);return ' · traffic moving at '+Math.round(t.cur/(US()?1.609344:1))+' of '+Math.round(t.free/(US()?1.609344:1))+' '+(US()?'mph':'km/h')+(t.adj>0.05?', road +'+(US()?(t.adj*1.8).toFixed(1):t.adj.toFixed(1))+' '+tU():', no road warming')}
+function xwLogLine(){const L=roadLog(),xn=L.filter(e=>e.xw!=null).length,rx=S.rides.filter(r=>r.roadSrc==='xweather').length;
+  return `<p class="mute" style="margin:8px 0 0">Saved readings (last 14 days): ${xn} from Xweather, ${L.length-xn} estimate only. ${rx} of ${S.rides.length} rides use Xweather readings taken during the ride; the rest keep the app's own estimate. Readings are saved only while the app is open. Both numbers are in the CSV export.</p>`}
 function xweatherCard(){const x=xwc(),q=now.xweather;
   const line=q?(q.err?esc(q.err):`Road surface ${tF(q.tempC).toFixed(0)} ${tU()}${q.cond?' ('+esc(q.cond.toLowerCase())+')':''}${q.road?' on '+esc(q.road):''}, checked ${new Date(q.ms).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}. The app's own estimate was ${now.roadEstC!=null?tF(now.roadEstC).toFixed(0)+' '+tU():'not available'}.`):(S.home?'':'Set your location first (Data, above).');
   return `<div class="card"><h2>Road temperature from Xweather</h2><p class="mute" style="margin-top:0">Optional. Xweather's Road Weather Conditions gives a modeled road surface temperature for the road nearest your saved location, refreshed about every 15 minutes. When it works, the app uses it instead of its own road estimate and sends it to the Garmin data field. It is a model, not a sensor at your spot, and covers North America, Europe, Japan, Australia and New Zealand. Create a free Xweather account at xweather.com to get a client ID and secret (15,000 requests a month at the time of writing).</p>
@@ -930,7 +946,7 @@ function xweatherCard(){const x=xwc(),q=now.xweather;
   <div class="row" style="margin-top:8px"><div><label for="xwp">Road location (optional): a street address, ZIP code or lat,lon on the road you ride</label><input id="xwp" data-xw="place" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="5606 N Lamar Blvd, Austin, TX" value="${esc(x.place||'')}"></div></div>
   <div class="row" style="margin-top:8px"><div><label for="xwo">Use Xweather road temperature</label><select id="xwo" data-xwon="1"><option value="1"${x.on?' selected':''}>On</option><option value="0"${!x.on?' selected':''}>Off</option></select></div></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button data-act="xwnow"${x.id&&x.secret&&S.home?'':' disabled'}>Check road temperature now</button></div>
-  <p class="mute" id="xwmsg" aria-live="polite" style="margin:8px 0 0">${line}</p></div>`}
+  <p class="mute" id="xwmsg" aria-live="polite" style="margin:8px 0 0">${line}</p>${xwLogLine()}</div>`}
 function trafficCard(){const x=trf(),t=now.traffic;
   return `<div class="card"><h2>Traffic and road temperature</h2><p class="mute" style="margin-top:0">Slow, heavy traffic can warm the road a little. With a free TomTom key the app checks traffic near you and nudges the road temperature estimate up, which feeds the sealant drying estimate. This is optional and off until you add a key.</p>
   <label for="tk">TomTom API key</label><input id="tk" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" data-tk="1" value="${esc(x.key||'')}" placeholder="Paste your key">
@@ -1584,18 +1600,18 @@ document.addEventListener('click',async ev=>{
     try{msg['s_'+k]='Connecting…';render(true);await c.token({grant_type:'authorization_code',code,redirect_uri:'http://localhost'});msg['s_'+k]='Connected.';render(true);await srcSync(k,true)}catch(e){msg['s_'+k]=c.name+': '+e.message;render(true)}}
   else if(act==='srcsync'){await srcSync(b.dataset.k,true)}
   else if(act==='srcdisc'){const k=b.dataset.k,c=OAUTHS[k],x=sx(k);S.src[k]={id:x.id,secret:x.secret};S.weights=S.weights.filter(w=>w.src!==c.name);autoWeight();msg['s_'+k]='Disconnected. '+c.name+' data removed from this app.';save();render()}
-  else if(act==='nowwx'){try{if(!S.home)throw new Error('Set a location in Settings, Data first.');msg.now='Looking up…';render();const c=await nowWithTraffic();Object.assign(now,c);msg.now='';}catch(e){msg.now=netErr(e)}render()}
+  else if(act==='nowwx'){try{if(!S.home)throw new Error('Set a location in Settings, Data first.');msg.now='Looking up…';render();const c=await nowWithTraffic();Object.assign(now,c);msg.now='';logRoad(c);applyRoadLog();save();}catch(e){msg.now=netErr(e)}render()}
   else if(act==='geo'){const v=$('#place').value.trim();if(!v)return;try{msg.loc='Searching…';render();const cm=v.match(/^(-?\d{1,2}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)$/);const p=cm&&Math.abs(+cm[1])<=90&&Math.abs(+cm[2])<=180?{lat:+cm[1],lon:+cm[2],altM:(S.home&&S.home.altM)||null,label:'your coordinates'}:await ENV.geocode(v);S.home=Object.assign(p,{manual:true});msg.loc='';save();fetchNow()}catch(e){msg.loc=netErr(e)}render()}
   else if(act==='gps'){await autoLocate(true)}
   else if(act==='enrich'){try{if(!S.home&&!S.rides.some(r=>r.lat!=null))throw new Error('Set a location first.');msg.enr='Working…';render();const r=await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,(d,f,t)=>{msg.enr=`${d} of ${t} rides done`;});msg.enr=`Added weather to ${r.done} of ${r.total} rides${r.fail?`. ${r.fail} could not be looked up (no connection or no data).`:'.'}`;save()}catch(e){msg.enr=netErr(e)}render()}
   else if(act==='logride'){const d=parseFloat($('#rm').value);if(!(d>0)){msg.ride='Enter the distance you rode.';return render(true)}
     const km=US()?d/0.621371:d,hh=parseFloat($('#rh').value),hours=hh>0?hh:Math.max(0.2,+(km/22).toFixed(1)),ms=toMs($('#rd').value)||Date.now();
-    const tempC=now.airC!=null&&Math.abs(ms-Date.now())<2*864e5?now.airC:null,roadC=tempC!=null&&now.roadC!=null?now.roadC:null;
+    const tempC=now.airC!=null&&Math.abs(ms-Date.now())<2*864e5?now.airC:null,roadC=tempC!=null&&now.roadC!=null?now.roadC:null,xwOk=roadC!=null&&now.xweather&&!now.xweather.err;
     if(S.example){S.rides=[];S.example=false}
-    S.rides=TG.dedupeRides(S.rides.concat([{startMs:ms,hours,km,tempC,roadC,source:'Entered'}]));
+    S.rides=TG.dedupeRides(S.rides.concat([{startMs:ms,hours,km,tempC,roadC,source:'Entered',roadSrc:roadC==null?undefined:(xwOk?'xweather':'estimate'),roadN:xwOk?1:undefined,roadEstC:xwOk&&now.roadEstC!=null?now.roadEstC:undefined}]));
     msg.ride=`Ride saved: ${Math.round(dI(km)*10)/10} ${dU()}, about ${hours} h${hh>0?'':' (estimated from distance)'}. Estimates updated.`;
     save();render();
-    if(tempC==null&&S.home){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});save();render(true)}catch(e){}}}
+    if(tempC==null&&S.home){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});applyRoadLog();save();render(true)}catch(e){}}}
   else if(act==='homesave'){const k=+b.dataset.i,t=S.tires[k],pv=$('#ha'+k).value,v=Math.round(parseFloat(pv)*10)/10,lv=$('#hs'+k).value,done=[];
     const dn=$('#hd'+k)?$('#hd'+k).value:'';let dc=null;
     if(pv!==''&&!(v>0&&v<200)){msg['h'+k]='Enter the pressure on your gauge, in PSI.';return render(true)}
@@ -1727,7 +1743,7 @@ const isoT=ms=>ms?new Date(ms).toISOString().slice(0,16)+'Z':'';
 const CSV_COLS=['record','date_time','wheel','tire','width_mm','nominal_width_mm','rim_width_mm','tire_type','max_psi','hookless','installed_date',
  'sealant_brand','sealant_dose_ml','sealant_applied_date','air_target_psi','air_low_line_psi','air_estimate_psi','leak_pct_per_day','sealant_estimate_ml','sealant_percent_of_full_dose',
  'air_before_psi','air_after_psi','air_change_psi','fill_temp_c','altitude_m','sealant_check_level','puncture_hole_mm','puncture_kind','sealant_lost_ml','sealant_removed_ml','air_app_estimate_psi','air_difference_psi','dipstick_notch','dipstick_base_notch','dipstick_percent','sealant_estimate_percent_of_base','difference_points','within_one_notch',
- 'ride_hours','ride_km','ride_air_c','ride_road_c','body_weight_kg','rider_kg','bike_kg','terrain','surface','traffic_speed_kmh','traffic_free_flow_kmh','traffic_road_adjust_c','series','source','estimate','entered','error','abs_error','percent_error','unit','within_target','target_tolerance','estimate_basis','entries_before','model_version','note'];
+ 'ride_hours','ride_km','ride_air_c','ride_road_c','road_source','road_est_c','road_readings','body_weight_kg','rider_kg','bike_kg','terrain','surface','traffic_speed_kmh','traffic_free_flow_kmh','traffic_road_adjust_c','series','source','estimate','entered','error','abs_error','percent_error','unit','within_target','target_tolerance','estimate_basis','entries_before','model_version','note'];
 function buildCsv(){
   const rows=[CSV_COLS],R=o=>rows.push(CSV_COLS.map(c=>o[c]==null?'':o[c])),r1=v=>v==null||isNaN(v)?'':Math.round(v*10)/10;
   const nowMs=Date.now(),own=S.rides.filter(r=>!isProv(r));
@@ -1757,7 +1773,8 @@ function buildCsv(){
       R(Object.assign({},base,{record:'trend',date_time:isoT(ms),air_target_psi:A?r1(A.tgt):'',air_low_line_psi:A?r1(A.tgt*0.8):'',air_estimate_psi:ar&&ar.known?r1(ar.estPsi):'',sealant_estimate_ml:sl?Math.round(sl.leftMl):'',sealant_percent_of_full_dose:sl&&full?Math.round(100*sl.leftMl/full):''}))}});
   if(now.airC!=null)R({record:'conditions_now',date_time:isoT(nowMs),ride_air_c:r1(now.airC),ride_road_c:r1(now.roadC),altitude_m:now.elevation!=null?Math.round(now.elevation):'',
     traffic_speed_kmh:now.traffic&&!now.traffic.err?Math.round(now.traffic.cur):'',traffic_free_flow_kmh:now.traffic&&!now.traffic.err?Math.round(now.traffic.free):'',traffic_road_adjust_c:now.traffic&&!now.traffic.err?r1(now.traffic.adj):''});
-  if(exp.rides)own.forEach(r=>R({record:'ride',date_time:isoT(r.startMs),ride_hours:r1(r.hours),ride_km:r1(r.km),ride_air_c:r1(r.tempC),ride_road_c:r1(r.roadC),note:r.source||''}));
+  if(exp.rides)own.forEach(r=>R({record:'ride',date_time:isoT(r.startMs),ride_hours:r1(r.hours),ride_km:r1(r.km),ride_air_c:r1(r.tempC),ride_road_c:r1(r.roadC),road_source:r.roadC==null?'':(r.roadSrc||'estimate'),road_est_c:r1(r.roadEstC!=null?r.roadEstC:(r.roadSrc==='xweather'?null:r.roadC)),road_readings:r.roadN||'',note:r.source||''}));
+  if(exp.rides)roadLog().forEach(e=>R({record:'road_log',date_time:isoT(e.ms),ride_air_c:r1(e.air),ride_road_c:r1(e.xw),road_source:e.xw!=null?'xweather':'',road_est_c:r1(e.est),note:'reading saved while the app was open'}));
   if(exp.weight)S.weights.filter(w=>!isProv(w)).forEach(w=>R({record:'weight',date_time:isoT(w.ms),body_weight_kg:r1(w.kg)}));
   return rows.map(r=>r.map(csvCell).join(',')).join('\r\n')}
 function dataCard(){return `<div class="card"><h2>Your data and privacy</h2>
@@ -1809,7 +1826,7 @@ async function stravaSync(force){
     if(S.example){S.rides=[];S.example=false}
     S.rides=TG.dedupeRides(S.rides.filter(r=>r.source!=='Strava').concat(rides));
     x.last=Date.now();x.count=rides.length;msg.strava=`Strava read: ${rides.length} rides${x.bikes.length?', '+x.bikes.length+' bikes':''}.`;save();render(true);
-    if(S.home&&S.rides.some(r=>r.roadC==null)){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});save();render(true)}catch(e){}}
+    if(S.home&&S.rides.some(r=>r.roadC==null)){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});applyRoadLog();save();render(true)}catch(e){}}
   }catch(e){msg.strava='Strava: '+e.message;render(true)}
 }
 function stravaCard(){const x=stv(),on=!!x.refresh;
@@ -1849,7 +1866,7 @@ async function icuSync(force){
     addRides(rides,'Intervals.icu');
     let nw=0;try{const w=await icuGet('/wellness'+q);nw=addWeights((Array.isArray(w)?w:[]).filter(d=>d.weight>0&&d.id).map(d=>({ms:Date.parse(d.id+'T12:00:00'),kg:d.weight})),'Intervals.icu')}catch(e){if(/did not accept/.test(e.message))throw e}
     x.last=Date.now();x.count=rides.length;x.wcount=nw;msg.s_icu=`Intervals.icu read: ${rides.length} rides, ${nw} new weights.`;save();render(true);
-    if(S.home&&S.rides.some(r=>r.roadC==null)){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});save();render(true)}catch(e){}}
+    if(S.home&&S.rides.some(r=>r.roadC==null)){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});applyRoadLog();save();render(true)}catch(e){}}
   }catch(e){msg.s_icu='Intervals.icu: '+e.message;render(true)}}
 function icuCard(){const x=sx('icu'),on=!!x.last;
   return `<div class="card"><h2>Intervals.icu</h2><p class="mute" style="margin-top:0">Reads your rides and daily weight. Intervals.icu can collect these from Garmin, Wahoo, Zwift and other services, so connecting it here is the closest thing to a live Garmin link. Read only.</p>
@@ -1926,7 +1943,7 @@ async function autoLocate(force){
     S.home={lat:p.lat,lon:p.lon,altM:p.altM,label:`Current location (${p.lat.toFixed(2)}, ${p.lon.toFixed(2)})`,gps:true};
     msg.loc='';save();render(true);
     await fetchNow();
-    if(!S.example&&S.rides.some(r=>r.roadC==null)){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});save()}catch(e){}}
+    if(!S.example&&S.rides.some(r=>r.roadC==null)){try{await ENV.enrichRides(S.rides,S.home,S.rider.surface,S.a,()=>{});applyRoadLog();save()}catch(e){}}
   }catch(e){msg.loc='Could not get your location automatically: '+e.message+' Allow location for this page or app, or type a town below.'}
   locBusy=false;render(true);
 }
@@ -2018,7 +2035,7 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}
 pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();
 document.addEventListener('visibilitychange',()=>{if(document.hidden){alHiddenAt=Date.now();return}if(!document.hidden){if(alHiddenAt&&Date.now()-alHiddenAt>30000)alOpenCheck();alHiddenAt=0;try{if(tab==='home'&&detail===null)render(true);else checkAlerts()}catch(e){}autoLocate();autoHealth();stravaSync();syncAll()}});
 let alBeat=Date.now();setInterval(()=>{const n=Date.now();if(n-alBeat>30000&&!document.hidden)alOpenCheck();alBeat=n},2000);window.addEventListener('pageshow',ev=>{if(ev.persisted)alOpenCheck()});
-window.__TG={get S(){return S},xweatherRoad,get now(){return now},importFiles,render,alOpenCheck,garminPayload,checkAlerts,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
+window.__TG={get S(){return S},xweatherRoad,logRoad,applyRoadLog,roadLog,get now(){return now},importFiles,render,alOpenCheck,garminPayload,checkAlerts,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
 })();
 
 </script>

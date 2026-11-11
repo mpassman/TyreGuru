@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-10 xw5';
+const BUILD='2026-11-10 xw6';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -889,7 +889,7 @@ async function xweatherRoad(loc){const x=xwc();if(!x.id||!x.secret)throw new Err
   if(r.status===401||r.status===403||(j&&j.error&&/invalid_client|unauthorized|forbidden|usage/i.test(String(j.error.code||''))))throw new Error('Xweather did not accept that ID and secret'+(j&&j.error&&j.error.description?' ('+j.error.description+')':'')+'.');
   if(r.status===429)throw new Error('Xweather says too many requests. Try again later.');
   if(!j||!j.success)throw new Error('Xweather: '+((j&&j.error&&(j.error.description||j.error.code))||('error '+r.status))+'.');
-  const rp=Array.isArray(j.response)?j.response[0]:j.response,per=(rp&&rp.periods)||[];if(!per.length)throw new Error('No road data came back for this spot'+(rp?' (Xweather found '+(rp.road&&rp.road.name?esc(rp.road.name):'no named road')+' but sent no road readings; fields: '+Object.keys(rp).join(', ')+')':' (empty answer from Xweather)')+'. Coverage is North America, Europe, Japan, Australia and New Zealand.');
+  const rp=Array.isArray(j.response)?j.response[0]:j.response,per=(rp&&rp.periods)||[];if(!per.length)throw new Error('[xw6] No road readings came back. Xweather replied: '+String(r.text||'').replace(/client_(id|secret)=[^&"\s]*/g,'').replace(/\s+/g,' ').slice(0,300));
   const nowS=Date.now()+15*60e3;let cur=per[0];per.forEach(q=>{if(q.timestamp*1000<=nowS&&q.roadSurface&&q.roadSurface.tempC!=null)cur=q});
   if(!cur.roadSurface||cur.roadSurface.tempC==null)throw new Error('Xweather returned no road temperature for this spot.');
   return {tempC:cur.roadSurface.tempC,cond:cur.roadSurface.condition||'',road:(rp.road&&rp.road.name)||'',periodMs:cur.timestamp*1000,ms:Date.now()}}

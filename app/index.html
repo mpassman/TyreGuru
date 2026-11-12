@@ -618,7 +618,7 @@ let changing=null,S=null, tab='home', msg={}, aiOut=null, aiBusy=false, now={air
 const fmtD=ms=>new Date(ms).toISOString().slice(0,10);
 const toMs=d=>{const ms=Date.parse(d+'T12:00:00');return ms>Date.now()&&d===fmtD(Date.now())?Date.now():ms};
 /* a new reading must count as the newest one, even if an earlier entry was stamped with a later time of day */
-const BUILD='2026-11-12 A7';
+const BUILD='2026-11-12 A8';
 const fillStamp=t=>(t.fills||[]).reduce((m,f)=>Math.max(m,(f.dateMs||0)+1),Date.now());
 const evStamp=t=>Math.max(Date.now(),t.sealant&&t.sealant.dateMs||0);
 
@@ -743,6 +743,8 @@ function wear(t){
   const manual=t.condition&&t.condition!=='auto';
   return {km,noKm,life,f,fa,fe,days,by,auto,cond:manual?t.condition:auto,manual};
 }
+/* Rated tire life in miles is typed per tire. Miles ridden come from the rides since install (km x 0.621371). No rating typed means no countdown and no mileage alerts. */
+function milesLeft(t){const r=+t.ratedMi||0;if(r<=0)return null;const ridden=wear(t).km*0.621371;return {rated:r,ridden,left:Math.max(0,r-ridden)}}
 function rideC(){return now.airC!=null?now.airC:(S.nowC!=null&&S.nowC!==''?+S.nowC:null)}
 function advice(t){
   const a=S.a,nowMs=Date.now();
@@ -802,6 +804,8 @@ function tireForm(t){
   <p class="mute" style="margin:4px 0">Tire not in the list? Type its brand and model and the printed width, then tap “Not listed? Add it” in the suggestions. The app adds it to your own list, and (if you allow it on the Data tab) sends the brand, model and width so it can be looked up online and added for everyone. Enter the maximum pressure from the sidewall below. <a href="https://www.google.com/search?q=${encodeURIComponent(((t.brand||'')+' '+(t.model||'')+' '+(t.nominalMm||'')+' mm tire maximum pressure psi').trim())}" target="_blank" rel="noopener">Search the web for this tire</a></p>`}
   <div class="row"><div><label for="${n}i">Tire installed on</label><input id="${n}i" type="date" data-d="tires.${i}.installMs" value="${fmtD(t.installMs)}"></div>
   <div><label for="${n}c">Tire condition</label><select id="${n}c" data-f="tires.${i}.condition">${['auto','new','good','fair','poor'].map(c=>`<option value="${c}" ${t.condition===c?'selected':''}>${c==='auto'?'Automatic, from install date and mileage':c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}</select></div></div>
+  <div class="row"><div><label for="${n}rm">Rated tire life, miles</label><input id="${n}rm" type="number" min="0" inputmode="numeric" data-f="tires.${i}.ratedMi" value="${t.ratedMi||''}" placeholder="e.g. 3000"></div></div>
+  ${(()=>{const q=milesLeft(t);return `<p class="mute">${q?`Ridden on this tire since install: ${Math.round(q.ridden).toLocaleString()} miles. Left: ${Math.round(q.left).toLocaleString()} miles. A smoke-alarm alert sounds once at 50 miles or less, and a fire-alarm siren sounds once at 0.`:'Enter what this tire is rated to last. Leave it blank for no mileage countdown and no mileage alerts.'}</p>`})()}
   ${(()=>{const w=wear(t);const mo=Math.round(w.days/30.4);return `<p class="mute">Condition is worked out from the install date and the rides since then (from Strava, Garmin files, Apple Health, Intervals.icu or rides you log). ${dR(w.km)} ${dU()} ridden since ${fmtD(t.installMs)}: ${Math.round(w.f*100)}% of an assumed ${dR(w.life)} ${dU()} life for a ${t.type==='mtb'?'mountain bike':t.type} tire. Installed ${mo===1?'1 month':mo+' months'} ago: ${Math.round(w.fa*100)}% of an assumed ${Math.round(LIFE_DAYS/365)} year age limit. The higher of the two sets the condition, which is ${w.cond}${w.manual?' (set by you)':(w.cond==='new'?'':` (driven by ${w.by})`)}. These tire lives are rough assumptions, not tested.${w.noKm?` ${w.noKm} rides have no distance and are not counted.`:''}${S.rides.length===0?' Connect Strava or import rides in Settings, Data so mileage counts.':''}</p>`})()}
   <div class="row"><div><label for="${n}p">Silca's result for this ${t.wheel} tire, PSI</label><input id="${n}p" type="number" step="0.1" data-cal="${i}" inputmode="decimal" value="${t.cal?t.cal.psi:''}" placeholder="enter Silca's result"></div></div>
   <p class="mute"><b>Calibrate to Silca.</b> (1) Your system weight (rider plus bike) is ${wfmt(Number(S.rider.riderKg)+Number(S.rider.bikeKg))}. Silca asks for the total, in the unit you choose on its page. (2) Open <a href="https://silca.cc/pages/sppc-lite" target="_blank" rel="noopener">Silca's free calculator</a> (or the <a href="https://silca.cc/pages/pro-tire-pressure-calculator" target="_blank" rel="noopener">Pro version</a>) and enter that weight and a measured width of ${t.widthMm} mm. (3) Type the ${t.wheel} result above. The app saves it along with the weight, width and surface it was run with. Your target then equals Silca's number at those settings and moves with changes in weight or width using the app's own estimate. If you change the road surface, run Silca again. ${t.cal?`<br>Saved: ${t.cal.psi} PSI at ${Math.round(t.cal.kg*2.20462)} lb, ${t.cal.widthMm} mm, ${(TG.TERRAIN[t.cal.terrain]||{}).label||t.cal.terrain}.`:`Until then the app shows its own estimate (${TG.targetPsi({riderKg:S.rider.riderKg,bikeKg:S.rider.bikeKg,widthMm:t.widthMm,terrain:S.rider.terrain,wheel:t.wheel})} PSI).`}</p>${same?'':`<div class="row"><div><label for="${n}x">Tire maximum pressure, PSI</label><input id="${n}x" type="number" data-f="tires.${i}.maxPsi" value="${t.maxPsi||''}" placeholder="printed on the sidewall"></div>
@@ -842,6 +846,7 @@ function viewSetup(){
 }
 function srcRow(name,state,detail){return `<div class="src"><span><b>${name}</b><br><span class="mute">${detail}</span></span><span class="tag ${state==='ok'?'green':'grey'}">${state==='ok'?'In use':'Not connected'}</span></div>`}
 /* ---------- Garmin auto sync: the iPhone app sends these numbers to the Edge data field ---------- */
+function miF(t){const q=t&&milesLeft(t);return q?Math.round(q.left):-1}
 function garminPayload(){
   const f=S.tires.find(t=>t.wheel==='front')||S.tires[0],r=S.tires.find(t=>t.wheel==='rear')||S.tires[1]||f;
   const us=US(),conv=ml=>us?Math.round(ml/29.5735*10)/10:Math.round(ml);
@@ -849,7 +854,7 @@ function garminPayload(){
   const F=get(f),R=get(r),d=new Date(),ymd=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   return {frontPsi:F.psi,frontTgt:F.tgt,rearPsi:R.psi,rearTgt:R.tgt,maxPsi:isFinite(F.x.A.lim)?Math.round(F.x.A.lim*10)/10:0,
     frontSeal:F.pct,rearSeal:R.pct,sealUnit:us?0:1,frontSealAmt:conv(F.left),frontFull:conv(F.full),rearSealAmt:conv(R.left),rearFull:conv(R.full),
-    updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
+    frontMi:miF(f),rearMi:miF(r),updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
 }
 let _garminLast='';
 function garminHandler(){try{return window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.garmin||null}catch(e){return null}}
@@ -1144,13 +1149,15 @@ function alNat(){try{return window.webkit&&window.webkit.messageHandlers&&window
 let alCtx=null,alSeen={},alBase=false,alOkMs=0,alRem='',alOpened=false,alHiddenAt=0,alOpenTm=[];
 function alUnlock(){try{if(!alCtx){const C=window.AudioContext||window.webkitAudioContext;if(C)alCtx=new C()}if(alCtx&&alCtx.state==='suspended')alCtx.resume()}catch(e){}}
 function alBell(){if(!alCtx)return;const t0=alCtx.currentTime+.02;[0,.28].forEach(st=>[[1,1,3.2],[2.76,.55,4.5],[5.4,.3,6],[8.93,.15,9]].forEach(([r,a,d])=>{const o=alCtx.createOscillator(),g=alCtx.createGain();o.type='sine';o.frequency.value=2300*r;g.gain.setValueAtTime(0,t0+st);g.gain.linearRampToValueAtTime(.3*a,t0+st+.003);g.gain.setTargetAtTime(0,t0+st+.003,1/d);o.connect(g);g.connect(alCtx.destination);o.start(t0+st);o.stop(t0+st+.9)}))}
+function alSmoke(){if(!alCtx)return;const t0=alCtx.currentTime+.02;[0,.6,1.2].forEach(st=>{const o=alCtx.createOscillator(),g=alCtx.createGain();o.type='square';o.frequency.value=3100;g.gain.setValueAtTime(0,t0+st);g.gain.linearRampToValueAtTime(.3,t0+st+.01);g.gain.setValueAtTime(.3,t0+st+.42);g.gain.linearRampToValueAtTime(0,t0+st+.45);o.connect(g);g.connect(alCtx.destination);o.start(t0+st);o.stop(t0+st+.47)})}
+function alSiren(){if(!alCtx)return;const t0=alCtx.currentTime+.02;for(let j=0;j<4;j++){const s=t0+j*.75,o=alCtx.createOscillator(),g=alCtx.createGain();o.type='square';o.frequency.setValueAtTime(700,s);o.frequency.linearRampToValueAtTime(1700,s+.37);o.frequency.linearRampToValueAtTime(700,s+.74);g.gain.setValueAtTime(.35,s);g.gain.setValueAtTime(.35,s+.72);g.gain.linearRampToValueAtTime(0,s+.75);o.connect(g);g.connect(alCtx.destination);o.start(s);o.stop(s+.76)}}
 function alTone(notes){if(!alCtx)return;const t0=alCtx.currentTime+.02;notes.forEach(([f,s0,d])=>{const o=alCtx.createOscillator(),g=alCtx.createGain();o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0,t0+s0);g.gain.linearRampToValueAtTime(.35,t0+s0+.01);g.gain.linearRampToValueAtTime(0,t0+s0+d);o.connect(g);g.connect(alCtx.destination);o.start(t0+s0);o.stop(t0+s0+d+.02)})}
 /* kind: 'danger' (three beeps, 880 Hz) or 'chirp' (one short 2093 Hz tone). mode: both | vibrate | off */
 function alFire(kind,force){const A0=AL(),m=A0.mode;if(m==='off')return;if(A0.where==='garmin'&&!force)return;const sound=m==='both',vib=m==='both'||m==='vibrate',h=alNat();
   /* 'stale' = last reading is before the last ride: two lower beeps. The native wrapper only knows danger and chirp, so it is sent as danger with variant:'stale'. */
   if(h){try{h.postMessage({cmd:'alert',kind:kind==='stale'?'danger':kind,variant:kind==='stale'?'stale':undefined,sound,vib});return}catch(e){}}
-  if(sound){if(kind==='chirp')alBell();else alTone((kind==='stale'?[[660,0,.18],[660,.3,.18]]:[[880,0,.14],[880,.22,.14],[880,.44,.14]]))}
-  if(vib){try{navigator.vibrate&&navigator.vibrate(kind==='chirp'?[40]:(kind==='stale'?[150,90,150]:[200,100,200,100,200]))}catch(e){}}}
+  if(sound){if(kind==='chirp')alBell();else if(kind==='mi50')alSmoke();else if(kind==='mi0')alSiren();else alTone((kind==='stale'?[[660,0,.18],[660,.3,.18]]:[[880,0,.14],[880,.22,.14],[880,.44,.14]]))}
+  if(vib){try{navigator.vibrate&&navigator.vibrate(kind==='chirp'?[40]:(kind==='mi50'?[300,150,300,150,300]:(kind==='mi0'?[600,150,600,150,600,150,600]:(kind==='stale'?[150,90,150]:[200,100,200,100,200]))))}catch(e){}}}
 /* A tire is in danger when its dial reads red: air over the maximum or hookless limit, air more than 20% below target, or sealant under 40% of a full dose. */
 function alDanger(){const out=[];S.tires.forEach(t=>{const x=tireStatus(t),nm=t.wheel==='front'?'Front':'Rear';
   if(x.ar.known){if(x.overfilled)out.push({id:t.wheel+':airhigh',msg:`${nm} tire is over its maximum pressure. Let air out until the gauge reads ${Math.round(x.ar.tgt*10)/10} PSI.`});else if(x.ar.estPsi<x.Z.low)out.push({id:t.wheel+':airlow',msg:`${nm} tire air is more than 20% below target. Add air to ${x.ar.fillTo} PSI.`})}
@@ -1173,6 +1180,9 @@ function alRemItems(){const g={};S.tires.forEach(t=>{const n=alNextCheck(t);if(!
 function alSchedule(force){const h=alNat();if(!h)return;const a=AL(),items=a.remind?alRemItems():[],sig=JSON.stringify(items);if(!force&&sig===alRem)return;alRem=sig;try{h.postMessage({cmd:'remind',items})}catch(e){}}
 function alStop(){}
 function alPending(){const a=AL();return a.danger?alDanger().filter(q=>!a.ack[q.id]):[]}
+/* Mileage alerts: smoke-alarm beeps once when a tire reaches 50 miles left or less, fire-alarm siren once at 0. The level is remembered per tire so each sounds only once. */
+function milesCheck(a,allowed){if(!a.mi)a.mi={};let kind=null,dirty=false;S.tires.forEach(t=>{const q=milesLeft(t),lv=!q?'':(q.left<=0?'0':(q.left<=50?'50':'')),prev=a.mi[t.wheel]||'';
+  if(lv===prev)return;if(!allowed)return;a.mi[t.wheel]=lv;dirty=true;if(lv==='0')kind='mi0';else if(lv==='50'&&kind!=='mi0')kind='mi50'});return {kind,dirty}}
 function checkAlerts(){const a=AL(),d=alDanger(),ids=d.map(q=>q.id);let dirty=false;
   Object.keys(a.ack).forEach(k=>{if(!ids.includes(k)){delete a.ack[k];dirty=true}});
   const pend=a.danger?d.filter(q=>!a.ack[q.id]):[];
@@ -1180,6 +1190,7 @@ function checkAlerts(){const a=AL(),d=alDanger(),ids=d.map(q=>q.id);let dirty=fa
   const fresh=a.danger?d.filter(q=>!alSeen[q.id]):[];
   Object.keys(alSeen).forEach(k=>{if(!ids.includes(k))delete alSeen[k]});ids.forEach(k=>{alSeen[k]=true});
   if(fresh.length&&(alOpened||!a.open))alFire('danger');
+  const mc=milesCheck(a,alOpened||!a.open);if(mc.dirty)dirty=true;if(mc.kind)setTimeout(()=>alFire(mc.kind),fresh.length?1500:0);
   const sf=staleTires().filter(t=>staleSeen[t.wheel]!==staleInfo(t).rideMs);S.tires.forEach(t=>{if(!staleInfo(t).stale)delete staleSeen[t.wheel]});if(sf.length&&alOpened){sf.forEach(t=>{staleSeen[t.wheel]=staleInfo(t).rideMs});staleAck=false;if(!fresh.length)alFire('stale')}
   const opt=alOptimal(),chirp=alBase&&opt&&!a.wasOpt&&a.chirp&&!pend.length;
   if(a.wasOpt!==opt){a.wasOpt=opt;dirty=true}alBase=true;if(dirty)save();alSchedule(false);
@@ -2033,7 +2044,7 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}
 pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();
 document.addEventListener('visibilitychange',()=>{if(document.hidden){alHiddenAt=Date.now();return}if(!document.hidden){if(alHiddenAt&&Date.now()-alHiddenAt>30000)alOpenCheck();alHiddenAt=0;try{if(tab==='home'&&detail===null)render(true);else checkAlerts()}catch(e){}autoLocate();autoHealth();stravaSync();syncAll()}});
 let alBeat=Date.now();setInterval(()=>{const n=Date.now();if(n-alBeat>30000&&!document.hidden)alOpenCheck();alBeat=n},2000);window.addEventListener('pageshow',ev=>{if(ev.persisted)alOpenCheck()});
-window.__TG={get S(){return S},xweatherRoad,logRoad,applyRoadLog,roadLog,get now(){return now},importFiles,render,alOpenCheck,garminPayload,checkAlerts,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
+window.__TG={get S(){return S},xweatherRoad,logRoad,applyRoadLog,roadLog,get now(){return now},importFiles,render,alOpenCheck,garminPayload,checkAlerts,milesLeft,wear,alUnlock,alFire,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
 })();
 
 </script>

@@ -1239,8 +1239,8 @@ function gaugeSvg(o){
 <circle cx="${cx}" cy="${cy}" r="${Ri}" fill="#050505"/>`;
   o.zones.forEach(z=>{const a0=P(Math.max(0,z[0])),a1=P(Math.min(o.max,z[1]));if(a1>a0){const pt0=z[3]||(z[2].includes('--zl')?'pl':(z[2].includes('--zo')?'po':(z[2].includes('--zh')?'ph':null))),d=band(r0,r1,a0,a1);g+=`<path d="${d}" fill="${z[2]}"/>`+(pt0&&patternsOn()?`<path d="${d}" fill="url(#${pt0}${id})"/>`:'')}});
   // outer scale: black ticks on the band edge, black numbers on the band
-  for(let k=0;k<=12;k++){const v=k*o.max/12,a=P(v),big=k%2===0,[x1,y1]=pt(r1,a),[x2,y2]=pt(r1-(big?9:5),a);g+=`<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="#000" stroke-width="${big?2.2:1.4}"/>`;
-    if(big){const[tx,ty]=pt(r0+6.5,a);g+=`<text x="${f(tx)}" y="${f(ty+4.5)}" text-anchor="middle" font-size="12.5" font-weight="800" fill="#000" stroke="#fff" stroke-opacity=".9" stroke-width="2.2" paint-order="stroke">${lab(v)}</text>`}}
+  const DV=o.div||12,ST=DV==10?5:(o.div?4:2);for(let k=0;k<=DV;k++){const v=k*o.max/DV,a=P(v),big=k%ST===0,[x1,y1]=pt(r1,a),[x2,y2]=pt(r1-(big?9:5),a);g+=`<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="#000" stroke-width="${big?2.2:1.4}"/>`;
+    if(big){const[tx,ty]=pt(r0+6.5,a);g+=`<text x="${f(tx)}" y="${f(ty+4.5)}" text-anchor="middle" font-size="12.5" font-weight="800" fill="#000" stroke="#fff" stroke-opacity=".9" stroke-width="2.2" paint-order="stroke">${lab(v)+((o.plus&&k==DV)?'+':'')}</text>`}}
   // inner scale in the other unit
   if(o.alt){const im=o.max*o.alt.mul,st=o.alt.steps.find(q=>im/q<=6)||o.alt.steps[o.alt.steps.length-1],n=Math.floor(im/st+1e-6);
     for(let k=0;k<=n;k++){const u=k*st,a=P(u/o.alt.mul),[x1,y1]=pt(r0-3,a),[x2,y2]=pt(r0-8,a),[tx,ty]=pt(r0-17,a);g+=`<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="#fff" stroke-width="1.6"/><text x="${f(tx)}" y="${f(ty+3)}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff">${lab(u)}</text>`}}
@@ -1248,12 +1248,12 @@ function gaugeSvg(o){
   if(o.v!=null){const na=P(o.v),[nx,ny]=pt(r1-2,na),[bx,by]=pt(-13,na);g+=`<line x1="${f(bx)}" y1="${f(by)}" x2="${f(nx)}" y2="${f(ny)}" stroke="#000" stroke-width="6.5" stroke-linecap="round"/><line x1="${f(bx)}" y1="${f(by)}" x2="${f(nx)}" y2="${f(ny)}" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>`}
   g+=`<circle cx="${cx}" cy="${cy}" r="8.5" fill="#cfd2d6"/><circle cx="${cx}" cy="${cy}" r="5.2" fill="#2a2c2f"/><circle cx="${cx-1.4}" cy="${cy-1.4}" r="1.4" fill="#fff" fill-opacity=".8"/><text x="${cx}" y="${cy+42}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#fff" letter-spacing=".06em">${o.unit}</text>${o.alt?`<text x="${cx}" y="${cy+53}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#aeb2b7" letter-spacing=".06em">${o.alt.unit}</text>`:''}</svg>`;return g}
 function gaugeRow(t,x,L,ex){ex=ex||{};
-  const Z=x.Z,tgt=x.A.tgt,over=Z.over,max=over<=52?60:(over<=104?120:180);
+  const Z=x.Z,tgt=x.A.tgt,over=Z.over,max=over<=35?40:(over<=55?60:(over<=90?100:Math.ceil(over*1.1/20)*20)),dv=max==100?10:(max==40?8:12);
   const az=[[0,Z.low,'var(--zl)'],[Z.low,Z.good0,'var(--zo)'],[Z.good0,Z.good1,'var(--zg)'],[Z.good1,Z.over,'var(--zh)'],[Z.over,max,'var(--zl)','pv']];
   const full=TG.fullDoseMl(t.widthMm,t.sealant.brand,t.type,t.doseLevel)||1,pct=Math.max(0,Math.min(100,Math.round(100*x.sl.leftMl/full)));
   const cv=ml=>US()?ml/29.5735:ml,steps=[.25,.5,1,1.5,2,2.5,5,10,15,20,25,30,50,100],stp=steps.find(q=>q*6>=cv(full)*1.2-1e-9)||100,smax=stp*6;
   const sv=Math.min(smax,cv(x.sl.leftMl)),lowV=cv(full)*0.4,okV=cv(full)*0.9;
-  const air=gaugeSvg({id:'a'+t.wheel,max,tgt,unit:'PSI',alt:{mul:1/14.5038,unit:'BAR',steps:[.5,1,2,5]},v:x.ar.known?x.ar.estPsi:null,zones:az,aria:`Air pressure ${L.airTxt}, target ${Math.round(tgt*10)/10} PSI`});
+  const air=gaugeSvg({id:'a'+t.wheel,max,div:dv,plus:true,tgt,unit:'PSI',alt:{mul:1/14.5038,unit:'BAR',steps:[.5,1,2,5]},v:x.ar.known?x.ar.estPsi:null,zones:az,aria:`Air pressure ${L.airTxt}, target ${Math.round(tgt*10)/10} PSI`});
   const sl=gaugeSvg({id:'s'+t.wheel,max:smax,tgt:null,unit:US()?'FL OZ':'ML',alt:US()?{mul:29.5735,unit:'ML',steps:[10,20,25,50,100,200]}:{mul:1/29.5735,unit:'FL OZ',steps:[.5,1,2,5]},v:sv,zones:[[0,lowV,'var(--zl)'],[lowV,okV,'var(--zo)'],[okV,smax,'var(--zg)']],aria:`Sealant ${vR(x.sl.leftMl)} ${vU()}, ${L.seal}`});
   return `<div class="gcard"><div class="gcol" style="${L.airKey?`color:var(--t${L.airKey})`:''}">${air}<b style="color:inherit">${L.airTxt}</b><small style="color:inherit">Target ${Math.round(tgt*10)/10} PSI</small>${ex.air||''}</div><div class="gcol" style="color:var(--t${L.sealKey})">${sl}<b style="color:inherit">${L.sealTxt}</b><small style="color:inherit">${pct}% of full dose (${vR(full)} ${vU()})</small>${ex.seal||''}</div></div>`}
 function isNewTire(t){return t.condition==='new'||(t.installMs>0&&Date.now()-t.installMs<45*864e5)}

@@ -272,5 +272,38 @@
    "tol": 1,
    "srcUrl": "https://www.bicyclerollingresistance.com/"
   }
- ]
+ ],
+ "life": [
+  {
+   "brand": "continental",
+   "model": "grand prix 5000",
+   "kind": "rider",
+   "lowMi": 2500,
+   "highMi": 4000,
+   "srcUrl": "https://m.bikeforums.net/showthread.php?p=22401577",
+   "note": "Bike Forums thread: rear tires reported 2,500 to 4,000 mi (one outlier 8,000)",
+   "unreliable": true
+  },
+  {
+   "brand": "schwalbe",
+   "model": "pro one",
+   "kind": "rider",
+   "lowMi": 1900,
+   "highMi": 3000,
+   "srcUrl": "https://www.bikeforums.net/road-cycling/1241917-schwalbe-pro-one-tle-tire-user-experience.html",
+   "note": "Bike Forums thread: rear tires 1,900 to 3,000 mi",
+   "unreliable": true
+  },
+  {
+   "brand": "vittoria",
+   "model": "corsa pro",
+   "kind": "rider",
+   "lowMi": 2500,
+   "highMi": 2500,
+   "srcUrl": "https://theproscloset.com/blogs/news/2-000-miles-later-vittoria-corsa-pro-tlr-g2-0-long-term-review",
+   "note": "One reviewer: about 2,500 mi total life",
+   "unreliable": true
+  }
+ ],
+ "lifeNote": "Tread life is not published by most makers. These are rider-reported ranges, unreliable, and depend on rider weight, surface, pressure and rear vs front. Schwalbe only gives a generic 2,000 to 5,000 km for standard tires (schwalbe.com/en/technology-faq/tire-wear/)."
 }

@@ -41,3 +41,18 @@ assert.equal(discoveredSubs('junk', have, hs).length, 0);
 const r2 = await run({ issues: [], extra: found, tires: { tires: [] }, sealants: { products: [{ id: 'other', name: 'Other' }] }, key: 'k', fetchFn: fakeFetch, log() {} });
 assert.ok(/weekly search/.test(r2.report[0]) && r2.closes.length === 0, 'discovered items have no issue to close');
 console.log('discovery tests passed');
+
+/* tread-life lookups */
+{
+  const { validateLife, applyLife, lifeSweep } = await import('./research.mjs');
+  assert.ok(!validateLife({ found: false }, 'a', 'b').ok);
+  assert.ok(!validateLife({ found: true, lowMi: 50, highMi: 90, sourceUrl: 'https://x.com' }, 'a', 'b').ok, 'too small');
+  assert.ok(!validateLife({ found: true, lowMi: 2000, highMi: 3000, sourceUrl: 'http://x.com' }, 'a', 'b').ok, 'needs https');
+  const v = validateLife({ found: true, kind: 'rider', lowMi: 2000, highMi: 3000, sourceUrl: 'https://x.com/a', note: 'forum <b>' }, 'Acme', 'Fast');
+  assert.ok(v.ok && v.entry.unreliable === true && !/[<>]/.test(v.entry.note));
+  const db = { tires: [{ brand: 'Acme', model: 'Fast', nominal: 28, psi: 80 }, { brand: 'Acme', model: 'Slow', nominal: 28, psi: 80 }] };
+  assert.ok(applyLife(db, v.entry) && !applyLife(db, v.entry), 'no duplicates');
+  const f = async () => ({ ok: true, json: async () => ({ content: [{ type: 'text', text: '```json\n{"found":false}\n```' }] }) });
+  const r = await lifeSweep({ tires: db, key: 'k', fetchFn: f, log() {} });
+  assert.ok(r.changed && db.lifeChecked['acme|slow'] && !db.lifeChecked['acme|fast'], 'only unlisted models are searched, misses are remembered');
+}

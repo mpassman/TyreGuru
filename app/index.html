@@ -892,8 +892,18 @@ function twStart(){if(twHandler())twPost({cmd:'watch',paired:twPaired()})}
 /* Turn the sensor's raw bytes into PSI. Not known yet: fill this in once the format is worked out from the log. Return {psi:number} or null. */
 function twDecode(o){return null}
 window.__tyrewizStatus=function(t){const e=document.getElementById('twStatus');if(e)e.textContent=t};
+/* TyreWiz auto-log: with a sensor paired, air entries write themselves. First reading = starting pressure. A rise of 1.5 PSI or more that then settles = a fill (before, after). A quick drop of 2 PSI or more = air let out. */
+function twAutoLog(wheel,psi,nw,last){try{const t=S.tires.find(x=>x.wheel===wheel),w=twS()[wheel];if(!t||!w)return;
+  const add=(ms,b,a)=>{t.fills.push(b==null?{dateMs:ms,afterPsi:Math.round(a*10)/10,src:'tyrewiz'}:{dateMs:ms,beforePsi:Math.round(b*10)/10,afterPsi:Math.round(a*10)/10,src:'tyrewiz'})};
+  if(!t.fills.length){add(nw,null,psi);w.auto={lo:psi};return}
+  const st=w.auto||(w.auto={lo:psi});
+  if(last&&nw-last.ms>6*36e5)st.lo=psi;
+  if(st.pend){const p=st.pend;if(psi>p.peak){p.peak=psi;p.ms=nw}else if(nw-p.ms>=120000||psi<p.peak-0.5){if(p.peak-p.before>=1.5)add(p.ms,p.before,p.peak);st.pend=null;st.lo=psi}return}
+  if(last&&nw-last.ms<=10*60000&&last.psi-psi>=2){add(nw,last.psi,psi);st.lo=psi;return}
+  if(psi<st.lo)st.lo=psi;else if(psi>=st.lo+1.5)st.pend={before:st.lo,peak:psi,ms:nw}}catch(e){}}
+window.__twAuto=function(w,p,ms){const h=twS()[w].hist||(twS()[w].hist=[]);twAutoLog(w,p,ms,h[h.length-1]);h.push({ms,psi:p})};
 window.__tyrewizData=function(o){try{const w=twS();if(o.kind==='value'||o.kind==='found'){w.log.push({t:Date.now(),s:(o.svc||'').slice(0,8),c:(o.chr||'').slice(0,8),p:o.props,h:o.hex,k:o.kind});if(w.log.length>150)w.log.splice(0,w.log.length-150)}
-  if(o.kind==='value'){const d=twDecode(o);if(d&&d.psi>0){['front','rear'].forEach(k=>{if(w[k]&&w[k].id===o.id){w[k].psi=d.psi;w[k].at=Date.now();const h=w[k].hist||(w[k].hist=[]),l=h[h.length-1],nw=Date.now();if(!l||nw-l.ms>=5*60000||Math.abs(l.psi-d.psi)>=0.3){h.push({ms:nw,psi:Math.round(d.psi*10)/10});if(h.length>3000)h.splice(0,h.length-3000)}}});render(true)}}save()}catch(e){}};
+  if(o.kind==='value'){const d=twDecode(o);if(d&&d.psi>0){['front','rear'].forEach(k=>{if(w[k]&&w[k].id===o.id){w[k].psi=d.psi;w[k].at=Date.now();const h=w[k].hist||(w[k].hist=[]),l=h[h.length-1],nw=Date.now();twAutoLog(k,d.psi,nw,l);if(!l||nw-l.ms>=5*60000||Math.abs(l.psi-d.psi)>=0.3){h.push({ms:nw,psi:Math.round(d.psi*10)/10});if(h.length>3000)h.splice(0,h.length-3000)}}});render(true)}}save()}catch(e){}};
 /* Pairing flow: pick a tire slot, spin the wheel to wake the sensor, choose it from the list (name, signal) - or answer the popup when the
    phone hears an unpaired sensor. Several sensors can be heard at once; popups queue and only free tire slots are offered. */
 const twSeen={},twSnooze={};
@@ -1112,14 +1122,14 @@ function puncRef(i){const I=i,t=S.tires[i];
 </details>`}
 function adjustCard(i){const t=S.tires[i],nm=t.wheel==='front'?'Front':'Rear',x=tireStatus(t);
   return `<div class="card"><h3 style="margin-top:0">${nm} tire: take air or sealant out</h3><p class="mute" style="margin:0 0 6px">Let air out or draw sealant off and the estimates drop by that amount right away. To add air or sealant, use the entries above.</p>
-  <div class="row"><div><label for="ao${i}">Air let out, PSI</label><input id="ao${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" placeholder="e.g. 5"></div><div style="align-self:end"><button data-act="airout" data-i="${i}">Subtract air</button></div></div>
+  ${twS()[t.wheel]?'<p class="mute" style="margin:0 0 6px">Air let out is picked up from the TyreWiz automatically.</p>':`<div class="row"><div><label for="ao${i}">Air let out, PSI</label><input id="ao${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" placeholder="e.g. 5"></div><div style="align-self:end"><button data-act="airout" data-i="${i}">Subtract air</button></div></div>`}
   <p class="mute" style="margin:4px 0 8px">${x.ar.known?(x.ar.sensor?'TyreWiz reading now: ':'Estimated now: ')+(Math.round(x.ar.estPsi*10)/10)+' PSI.':(twS()[x.ar.wheel]?'Waiting for the TyreWiz reading. No gauge reading or fill log is needed.':'Log a fill or a gauge reading first so the app has a starting pressure.')}</p>
   <div class="row"><div><label for="so${i}">Sealant removed, ${vU()}</label><input id="so${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" placeholder="e.g. ${US()?0.5:15}"></div><div style="align-self:end"><button data-act="sealout" data-i="${i}">Subtract sealant</button></div></div>
   <p class="mute" style="margin:4px 0 0">Sealant now: ${vfmt(x.sl.leftMl)}.</p>
   <p class="mute" id="adj${i}" aria-live="polite" style="margin:6px 0 0">${esc(msg['a'+i]||'')}</p></div>`}
 function viewLog(){
   const opts=S.tires.map((t,i)=>`<option value="${i}"${i===logTi?' selected':''}>${t.wheel==='front'?'Front':'Rear'}</option>`).join('');
-  const hist=[];S.tires.forEach(t=>{t.fills.forEach(f=>hist.push([f.dateMs,t.wheel,`Air ${f.beforePsi!=null?(Math.round(f.beforePsi*10)/10)+' → ':''}${Math.round(f.afterPsi*10)/10} PSI${f.beforePsi!=null&&f.afterPsi<f.beforePsi-0.05?' (air let out)':''}`]));t.checks.forEach(c=>hist.push([c.dateMs,t.wheel,`Sealant check: ${c.level}`]));t.sealant.events.forEach(e=>hist.push([e.dateMs,t.wheel,e.kind==='removed'?'Sealant removed, '+vfmt(e.ml):'Puncture'+(e.holeMm?' '+e.holeMm+' mm':'')+(e.kind==='flat'?' (flat)':e.kind==='plugged'?' (plugged)':' sealed')+', '+vfmt(e.ml||S.a.mlPerSealEvent)+' sealant lost']));});
+  const hist=[];S.tires.forEach(t=>{t.fills.forEach(f=>hist.push([f.dateMs,t.wheel,`Air ${f.beforePsi!=null?(Math.round(f.beforePsi*10)/10)+' → ':''}${Math.round(f.afterPsi*10)/10} PSI${f.beforePsi!=null&&f.afterPsi<f.beforePsi-0.05?' (air let out)':''}${f.src==='tyrewiz'?' · from TyreWiz':''}`]));t.checks.forEach(c=>hist.push([c.dateMs,t.wheel,`Sealant check: ${c.level}`]));t.sealant.events.forEach(e=>hist.push([e.dateMs,t.wheel,e.kind==='removed'?'Sealant removed, '+vfmt(e.ml):'Puncture'+(e.holeMm?' '+e.holeMm+' mm':'')+(e.kind==='flat'?' (flat)':e.kind==='plugged'?' (plugged)':' sealed')+', '+vfmt(e.ml||S.a.mlPerSealEvent)+' sealant lost']));});
   hist.sort((a,b)=>b[0]-a[0]);
   const ests=S.tires.map(t=>{const A=advice(t);return {wheel:t.wheel,psi:A.air.known?Math.round(A.air.estPsi):null,tgt:A.tgt,fill:A.air.fillTo,needAir:A.air.needAir,ml:A.sealant.leftMl,needSeal:A.sealant.needAdd,add:A.sealant.addMl}});
   window.__est=ests;
@@ -1133,8 +1143,8 @@ function viewLog(){
   <div class="card"><h3 style="margin-top:0">Estimated now</h3>${nowLine}<p class="mute">Estimates only. Check the gauge and look at the sealant to confirm.</p></div>
   <div class="card"><h2>Log what you did</h2><p class="mute" style="margin-top:0">Each entry makes the estimates better. Gauge readings teach the app how fast your tire loses air. Sealant checks teach it how fast your sealant dries.</p>
   <label for="lt">Tire</label><select id="lt">${opts}</select><label for="ld">Date</label><input id="ld" type="date" value="${fmtD(Date.now())}">
-  <h3>Air</h3><div class="row"><div><label for="lb">Gauge reading before, PSI</label><input id="lb" type="number" inputmode="decimal" step="0.1" autocomplete="off" value="" placeholder="e.g. 42.6"></div><div><label for="la">PSI after filling</label><input id="la" type="number" inputmode="decimal" step="0.1" autocomplete="off" placeholder="${ests[0]?'target '+ests[0].tgt+', blank if no air added':''}"></div><div><label for="lc">Air temperature, ${tU()}</label><input id="lc" type="number" value="${Math.round(tF(now.airC!=null?now.airC:20))}"></div></div>
-  <button data-act="logair" style="margin-top:8px">Save air entry</button>
+  <h3>Air</h3>${twS()[(S.tires[logTi]||S.tires[0]).wheel]?`<p class="mute" style="margin:0"><b>TyreWiz is paired to this tire, so its air log writes itself.</b> The first reading is the starting pressure, a rise of 1.5 PSI or more is logged as a fill, and a quick drop of 2 PSI or more as air let out. They appear in History, marked from TyreWiz. If you forget the sensor, the manual air entry comes back here.</p>`:`<div class="row"><div><label for="lb">Gauge reading before, PSI</label><input id="lb" type="number" inputmode="decimal" step="0.1" autocomplete="off" value="" placeholder="e.g. 42.6"></div><div><label for="la">PSI after filling</label><input id="la" type="number" inputmode="decimal" step="0.1" autocomplete="off" placeholder="${ests[0]?'target '+ests[0].tgt+', blank if no air added':''}"></div><div><label for="lc">Air temperature, ${tU()}</label><input id="lc" type="number" value="${Math.round(tF(now.airC!=null?now.airC:20))}"></div></div>
+  <button data-act="logair" style="margin-top:8px">Save air entry</button>`}
   <h3>Sealant</h3><div class="row"><div><label for="ll">What you saw or felt</label><select id="ll"><option value="plenty">Plenty, sloshes freely</option><option value="some">Some left</option><option value="low">Low, thin film</option><option value="dry">Dry or clumpy</option></select></div></div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button data-act="logcheck">Save sealant check</button></div>
   <div class="row" style="margin-top:8px"><div><label for="am">Sealant added, ${vU()}</label><input id="am" type="number" step="0.1" placeholder="e.g. ${US()?1:30}"></div><div><label for="ab">Brand added</label><input id="ab" data-sg="sealant" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" placeholder="Type to search, or add your own"></div><div style="align-self:end"><button data-act="logadd">Save sealant added</button></div></div>
@@ -1396,10 +1406,13 @@ const trDates=(t0,span,X,H,W,R)=>`<line x1="${X(Date.now()).toFixed(1)}" y1="14"
 function twHist(w){try{return (S.tw&&S.tw[w]&&S.tw[w].hist||[]).slice()}catch(e){return []}}
 /* how close the app's number (estimate, or TyreWiz) is to what you entered: within 2 PSI = close, 2 to 4 = off, over 4 = far. The word is there so color is never the only signal. */
 function cmpTone(e){const a=Math.abs(e);return a<=2?{c:'var(--green)',w:'close'}:a<=4?{c:'var(--zo)',w:'off'}:{c:'var(--red)',w:'far'}}
-function airCmpTable(t){const rowsOf=(P,lab)=>P.length?`<div class="scroll"><table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:8px"><thead><tr style="text-align:left"><th>Date</th><th>${lab}</th><th>App estimate</th><th>Difference</th></tr></thead><tbody>${P.map(q=>`<tr><td style="white-space:nowrap">${fmtD(q.ms)}</td><td>${f1(q.entered)} PSI</td><td>${f1(q.est)} PSI</td><td style="white-space:nowrap;font-weight:600;color:${cmpTone(q.err).c}">${q.err>0?'+':''}${f1(q.err)} ${q.err>0?'high':'low'}<br>${cmpTone(q.err).w}</td></tr>`).join('')}</tbody></table></div>`:'';
+function airCmpTable(t,mode){const rowsOf=(P,lab)=>P.length?`<div class="scroll"><table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:8px"><thead><tr style="text-align:left"><th>Date</th><th>${lab}</th><th>App estimate</th><th>Difference</th></tr></thead><tbody>${P.map(q=>`<tr><td style="white-space:nowrap">${fmtD(q.ms)}</td><td>${f1(q.entered)} PSI</td><td>${f1(q.est)} PSI</td><td style="white-space:nowrap;font-weight:600;color:${cmpTone(q.err).c}">${q.err>0?'+':''}${f1(q.err)} ${q.err>0?'high':'low'}<br>${cmpTone(q.err).w}</td></tr>`).join('')}</tbody></table></div>`:'';
   const f1=v=>(Math.round(v*10)/10).toFixed(1),all=cmpPairs(t).filter(q=>q.metric==='air'),Pg=all.filter(q=>q.source==='gauge').slice(-6).reverse(),Pt=all.filter(q=>q.source==='tyrewiz').slice(-6).reverse();
-  return (Pg.length?'<h3 style="margin:12px 0 0">Estimate versus your gauge</h3>'+rowsOf(Pg,'You entered'):'')+(Pt.length?'<h3 style="margin:12px 0 0">Estimate versus TyreWiz</h3>'+rowsOf(Pt,'TyreWiz read'):'')+(Pg.length||Pt.length?`<p class="mute" style="margin:6px 0 0">Difference is the app's estimate minus the measured pressure (your gauge reading just before a fill, or the TyreWiz reading, one per day). <b style="color:var(--green)">Close</b>: within 2 PSI. <b style="color:var(--zo)">Off</b>: 2 to 4 PSI. <b style="color:var(--red)">Far</b>: more than 4 PSI.</p>`:'')}
-function airTrendCard(t){
+  const G=mode==='tw'?[]:Pg,T2=mode==='tw'?Pt:[];
+  return (G.length?rowsOf(G,'You entered'):'')+(T2.length?rowsOf(T2,'TyreWiz read'):'')+(G.length||T2.length?`<p class="mute" style="margin:6px 0 0">Difference is the app's estimate minus the measured pressure ${mode==='tw'?'the TyreWiz reading, one per day':'your gauge reading just before a fill'}. <b style="color:var(--green)">Close</b>: within 2 PSI. <b style="color:var(--zo)">Off</b>: 2 to 4 PSI. <b style="color:var(--red)">Far</b>: more than 4 PSI.</p>`:'')}
+function airTrendCard(t){const hasTw=!!twS()[t.wheel]||twHist(t.wheel).length>0,u=airChart(t,'user');if(typeof u==='string')return u;return u.card+(hasTw?airChart(t,'tw').card:'')+u.stats}
+/* Two charts with the same layout: the estimate (white) against one kind of measured data. mode 'user' = what you entered; mode 'tw' = what the TyreWiz read. */
+function airChart(t,mode){const TW=mode==='tw';
   const f=(t.fills||[]).slice().sort((a,b)=>a.dateMs-b.dateMs),shAll=twHist(t.wheel);
   if(!f.length&&!shAll.length)return `<div class="card"><h3 style="margin-top:0">Air pressure</h3><p class="mute" style="margin:0">No air is logged for this tire yet. Log a fill or a gauge reading in Settings, Log, and the pressure curve appears here.</p></div>`;
   const A=advice(t),Z=airZones(A),nowMs=Date.now(),[t0,span]=trWin(t),N=90;
@@ -1407,10 +1420,10 @@ function airTrendCard(t){
   const lk=TG.learnedLeakPct(f,S.a),lastF=f[f.length-1]||{dateMs:shAll[0].ms,afterPsi:shAll[shAll.length-1].psi},tw=twReading(t.wheel),cur=at(nowMs);
   const proj=Math.max(2*DAY,Math.min(14*DAY,span*0.25)),T1=nowMs+proj;
   const tms=[];for(let k=0;k<=N;k++)tms.push(t0+(nowMs-t0)*k/N);f.forEach(c=>{if(c.dateMs>t0&&c.dateMs<=nowMs){tms.push(c.dateMs-1);tms.push(c.dateMs)}});tms.sort((a,b)=>a-b);
-  const sh=shAll.filter(h=>h.ms>=t0).map(h=>[h.ms,h.psi]);   /* TyreWiz readings are measured data, like your gauge entries: the estimate keeps running so the model can be tested against them */
+  const sh=TW?shAll.filter(h=>h.ms>=t0).map(h=>[h.ms,h.psi]):[];   /* TyreWiz readings are measured data, like your gauge entries: the estimate keeps running so the model can be tested against them */
   const pts=[];tms.forEach(ms=>{const v=at(ms);if(v!=null)pts.push([ms,v])});
   /* your entered pressures: before-fill gauge reading, then the pressure after filling, joined in date order */
-  const usr=[];f.forEach(c=>{if(c.dateMs<t0||c.afterPsi==null)return;if(c.beforePsi!=null&&c.beforePsi!==c.afterPsi)usr.push([c.dateMs-1,c.beforePsi,1]);usr.push([c.dateMs,c.afterPsi,0])});
+  const usr=[];if(!TW)f.forEach(c=>{if(c.dateMs<t0||c.afterPsi==null||c.src==='tyrewiz')return;if(c.beforePsi!=null&&c.beforePsi!==c.afterPsi)usr.push([c.dateMs-1,c.beforePsi,1]);usr.push([c.dateMs,c.afterPsi,0])});
   const pr=[];if(cur!=null){const lastP=f[f.length-1];for(let k=0;k<=12;k++){const ms=nowMs+proj*k/12,d=(ms-nowMs)/DAY;pr.push([ms,cur*Math.pow(1-lk.pct/100,d)])}}
   const vals=pts.map(q=>q[1]).concat(pr.map(q=>q[1]),usr.map(q=>q[1]),sh.map(q=>q[1]),[Z.low,Z.tgt,Z.over]),hi=Math.max(...vals)*1.06,lo=Math.max(0,Math.min(...vals)*0.9);
   const W=320,H=190,L=38,R=8,T=10,B=24,X=ms=>L+(W-L-R)*(ms-t0)/(T1-t0),Y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo||1));
@@ -1419,17 +1432,21 @@ function airTrendCard(t){
   const ref=(v,lab,col)=>`<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W-R}" y2="${Y(v).toFixed(1)}" stroke="${col}" stroke-dasharray="4 3"/><text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mute)">${Math.round(v)}</text>`;
   const BL='#1f78d1',uline=usr.length>1?`<path d="${ln(usr)}" fill="none" stroke="${BL}" stroke-width="2.5" stroke-linejoin="round"/>`:'';
   const dots=uline+usr.map(q=>q[2]?`<circle cx="${X(q[0]).toFixed(1)}" cy="${Y(q[1]).toFixed(1)}" r="3.5" fill="var(--card)" stroke="${BL}" stroke-width="2"/>`:`<circle cx="${X(q[0]).toFixed(1)}" cy="${Y(q[1]).toFixed(1)}" r="4" fill="${BL}"/>`).join('');
-  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Estimated air pressure over time with target, low and maximum lines" style="display:block">${trNoRec(t0,f.length?f[0].dateMs:shAll[0].ms,X,L,T,H,B)}${band}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--line)"/>${trRides(t0,X,H,B)}${ref(Z.tgt,'target','var(--ink)')}${ref(Z.low,'low','var(--red)')}<path d="${ln(pts)}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${pr.length?`<path d="${ln(pr)}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>`:''}${sh.length>1?`<path d="${ln(sh)}" fill="none" stroke="#1aa58f" stroke-width="2.5" stroke-linejoin="round"/>`:''}${dots}<line x1="${X(nowMs).toFixed(1)}" y1="${T}" x2="${X(nowMs).toFixed(1)}" y2="${H-B}" stroke="var(--mute)" stroke-dasharray="2 3"/>${trDates(t0,span,X,H,W,R)}</svg>`;
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${TW?'Estimated air pressure and TyreWiz readings over time':'Estimated air pressure and the pressures you entered over time'}, with target and low lines" style="display:block">${trNoRec(t0,f.length?f[0].dateMs:shAll[0].ms,X,L,T,H,B)}${band}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="var(--line)"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--line)"/>${trRides(t0,X,H,B)}${ref(Z.tgt,'target','var(--ink)')}${ref(Z.low,'low','var(--red)')}<path d="${ln(pts)}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/>${pr.length?`<path d="${ln(pr)}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/>`:''}${sh.length>1?`<path d="${ln(sh)}" fill="none" stroke="#1aa58f" stroke-width="2.5" stroke-linejoin="round"/>`:''}${dots}<line x1="${X(nowMs).toFixed(1)}" y1="${T}" x2="${X(nowMs).toFixed(1)}" y2="${H-B}" stroke="var(--mute)" stroke-dasharray="2 3"/>${trDates(t0,span,X,H,W,R)}</svg>`;
   let eta='';if(cur!=null){if(cur<=Z.low)eta='Already below the low line.';else if(lk.pct>0){const d=Math.log(Z.low/cur)/Math.log(1-lk.pct/100);eta=d<=365?`At this leak rate it reaches the low line in about ${Math.max(1,Math.round(d))} day${Math.round(d)===1?'':'s'}.`:'Leaking slowly. No low-air date in the next year.'}}
   const pu=v=>(Math.round(v*10)/10)+' PSI';
-  return `<div class="card"><h3 style="margin-top:0">Air pressure</h3>${svg}<p class="mute" style="margin:4px 0 0"><b>━</b> Estimated pressure (the formula; it jumps up at each fill).${shAll.length?' <b style="color:#1aa58f">━</b> TyreWiz sensor (measured, like your entries; the estimate keeps running so the two can be compared).':''} Dotted: where it is heading. <b style="color:#1f78d1">━</b> Your entered pressure: <b style="color:#1f78d1">○</b> gauge reading before filling, <b style="color:#1f78d1">●</b> pressure after. Where the two lines meet, the estimate matches your gauge. Green band: good range. Red line: low (20% under target). Small ticks at the bottom are rides.</p>${airCmpTable(t)}</div>
+  const lgE='<b>━</b> Estimated pressure (the formula; it jumps up at each fill). Dotted: where it is heading.',
+    lgM=TW?' <b style="color:#1aa58f">━</b> TyreWiz reading (measured by the sensor).':' <b style="color:#1f78d1">━</b> Your entered pressure: <b style="color:#1f78d1">○</b> gauge reading before filling, <b style="color:#1f78d1">●</b> pressure after.',
+    lgT=' Where the two lines meet, the estimate matches '+(TW?'the sensor':'your gauge')+'. Green band: good range. Red line: low (20% under target). Small ticks at the bottom are rides.';
+  const card=`<div class="card"><h3 style="margin-top:0">Estimate versus ${TW?'TyreWiz':'what you entered'}</h3>${svg}<p class="mute" style="margin:4px 0 0">${lgE}${lgM}${lgT}</p>${airCmpTable(t,mode)}</div>`;
+  const stats=`
   <div class="stat"><span class="mute">Estimate now</span><br><b>${cur!=null?pu(cur):'unknown'}</b></div>
   ${tw?`<div class="stat"><span class="mute">TyreWiz now</span><br><b>${pu(tw.psi)}</b></div>`:''}
   <div class="stat"><span class="mute">Target</span><br><b>${pu(A.tgt)}</b></div>
   <div class="stat"><span class="mute">Last fill or reading</span><br><b>${fmtD(lastF.dateMs)} · ${pu(lastF.afterPsi)}</b></div>
   <div class="stat"><span class="mute">Leak rate</span><br><b>${lk.pct.toFixed(1)}% a day</b>${lk.n<3?' <span class="mute">(still learning)</span>':''}</div>
   ${eta?`<div class="stat" style="background:var(--line)"><span class="mute">${eta} Temperature swings change real pressure too, so check with a gauge.</span></div>`:''}`;
-}
+  return {card,stats}}
 function sealTrendCard(t){
   const nowMs=Date.now(),cur=Object.assign({},t.sealant,{endMs:null}),segs=(t.sealHist||[]).concat([cur]).filter(x=>x&&x.dateMs).sort((a,b)=>a.dateMs-b.dateMs);
   const [t0,span]=trWin(t),N=120,f=US()?1/29.5735:1;let doseNow=0;
@@ -1486,7 +1503,7 @@ function checkPushEst(t,o){try{if(recentMs(o.dateMs)){const st=sealantStateFor(t
   t.checks.push(o)}
 function cmpPairs(t){const out=[],w=t.wheel,DAY_=86400000;
   const f=(t.fills||[]).slice().sort((a,b)=>a.dateMs-b.dateMs);
-  f.forEach((c,k)=>{if(k<1||c.beforePsi==null||(c.dateMs-f[k-1].dateMs)/DAY_<0.5)return;let est=null,basis='snapshot';
+  f.forEach((c,k)=>{if(k<1||c.beforePsi==null||c.src==='tyrewiz'||(c.dateMs-f[k-1].dateMs)/DAY_<0.5)return;let est=null,basis='snapshot';
     if(c.estPsi!=null)est=c.estPsi;else{basis='recomputed';try{const st=TG.airState({lastFill:f[k-1],fills:f.slice(0,k),targetPsi:1,nowMs:c.dateMs,nowC:c.fillC!=null?c.fillC:null,nowAltM:c.altM!=null?c.altM:null,a:S.a});if(st.known)est=st.estPsi}catch(e){}}
     if(est==null)return;out.push({series:w+'_air',metric:'air',unit:'psi',ms:c.dateMs,source:'gauge',est,entered:c.beforePsi,err:est-c.beforePsi,tol:2,basis,priorN:k})});
   /* TyreWiz: one pair a day (the last reading that day) against what the model estimated at that moment, using only fills logged before it */

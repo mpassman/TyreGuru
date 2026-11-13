@@ -763,6 +763,7 @@ function advice(t){
   const fills=t.fills.slice().sort((x,y)=>x.dateMs-y.dateMs);
   const air=TG.airState({lastFill:fills[fills.length-1],fills,targetPsi:tgt,nowMs,nowC:rideC(),nowAltM:now.elevation!=null?now.elevation:null,a});
   if(air.known){air.fillTo=TG.fillForRide(tgt,20,rideC()!=null?rideC():20)}
+  air.wheel=t.wheel;
   const sw=twReading(t.wheel);   // a live TyreWiz reading replaces the estimate while it is fresh
   if(sw){const gap=tgt-sw.psi;Object.assign(air,{known:true,estPsi:sw.psi,tgt,gap,days:air.days||0,needAir:gap>0.20*tgt,tooHigh:-gap>0.05*tgt,lowPsi:sw.psi,highPsi:sw.psi,confidence:'sensor',sensor:true});if(!air.leak)air.leak={pct:0,n:0};air.fillTo=TG.fillForRide(tgt,20,rideC()!=null?rideC():20);air.addTo=air.fillTo}
   return {sealant,air,tgt,fromSilca,est,scaled,calStale,overLimit,lim,tgtRaw,limWhy:lm[1],noEtrto:!!t.hookless&&hooklessLimit(t.nominalMm)==null};
@@ -896,7 +897,7 @@ window.__tyrewizData=function(o){try{const w=twS();if(o.kind==='value'||o.kind==
 window.__tyrewizSeen=function(o){try{const w=twS();if(twPaired().includes(o.id)||w.asked[o.id]||document.getElementById('twAsk'))return;twAsk(o)}catch(e){}};
 function twAsk(o){const d=document.createElement('div');d.id='twAsk';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Pair TyreWiz');
   d.style.cssText='position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
-  d.innerHTML=`<div class="card" style="max-width:420px;width:100%;margin:0"><h2 style="margin-top:0">TyreWiz found</h2><p>Your phone picked up a TyreWiz sensor${o.name?' ('+esc(o.name)+')':''}. Do you want to pair it with TyreGuru? While it is paired, the app uses its pressure reading instead of the estimate. If it is not available, the app keeps using its own estimate.</p><p class="mute" style="margin-top:0">Which tire is it on?</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button data-tw="front">Front tire</button><button data-tw="rear">Rear tire</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="ghost" data-tw="later">Not now</button><button class="ghost" data-tw="never">Don't ask about this sensor</button></div></div>`;
+  d.innerHTML=`<div class="card" style="max-width:420px;width:100%;margin:0"><h2 style="margin-top:0">TyreWiz found</h2><p>Your phone picked up a TyreWiz sensor${o.name?' ('+esc(o.name)+')':''}. Do you want to pair it with TyreGuru? Once it is paired you do not need to enter a pressure reading or log a fill: the app takes the pressure from the sensor. If the sensor is out of range, the app falls back to its own estimate.</p><p class="mute" style="margin-top:0">Which tire is it on?</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button data-tw="front">Front tire</button><button data-tw="rear">Rear tire</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="ghost" data-tw="later">Not now</button><button class="ghost" data-tw="never">Don't ask about this sensor</button></div></div>`;
   d.addEventListener('click',ev=>{const b=ev.target.closest('[data-tw]');if(!b)return;const v=b.dataset.tw,w=twS();
     if(v==='front'||v==='rear'){w[v]={id:o.id,name:o.name||'TyreWiz',since:Date.now(),psi:null,at:0};w.asked[o.id]=1;twPost({cmd:'pair',id:o.id})}
     else if(v==='never'){w.asked[o.id]=1}
@@ -1084,7 +1085,7 @@ function puncRef(i){const I=i,t=S.tires[i];
 function adjustCard(i){const t=S.tires[i],nm=t.wheel==='front'?'Front':'Rear',x=tireStatus(t);
   return `<div class="card"><h3 style="margin-top:0">${nm} tire: take air or sealant out</h3><p class="mute" style="margin:0 0 6px">Let air out or draw sealant off and the estimates drop by that amount right away. To add air or sealant, use the entries above.</p>
   <div class="row"><div><label for="ao${i}">Air let out, PSI</label><input id="ao${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" placeholder="e.g. 5"></div><div style="align-self:end"><button data-act="airout" data-i="${i}">Subtract air</button></div></div>
-  <p class="mute" style="margin:4px 0 8px">${x.ar.known?'Estimated now: '+(Math.round(x.ar.estPsi*10)/10)+' PSI.':'Log a fill or a gauge reading first so the app has a starting pressure.'}</p>
+  <p class="mute" style="margin:4px 0 8px">${x.ar.known?(x.ar.sensor?'TyreWiz reading now: ':'Estimated now: ')+(Math.round(x.ar.estPsi*10)/10)+' PSI.':(twS()[x.ar.wheel]?'Waiting for the TyreWiz reading. No gauge reading or fill log is needed.':'Log a fill or a gauge reading first so the app has a starting pressure.')}</p>
   <div class="row"><div><label for="so${i}">Sealant removed, ${vU()}</label><input id="so${i}" type="number" inputmode="decimal" step="0.1" min="0" autocomplete="off" placeholder="e.g. ${US()?0.5:15}"></div><div style="align-self:end"><button data-act="sealout" data-i="${i}">Subtract sealant</button></div></div>
   <p class="mute" style="margin:4px 0 0">Sealant now: ${vfmt(x.sl.leftMl)}.</p>
   <p class="mute" id="adj${i}" aria-live="polite" style="margin:6px 0 0">${esc(msg['a'+i]||'')}</p></div>`}
@@ -1174,7 +1175,7 @@ function levelWord(x){
   const seal=x.sealRed?'Low':(pct<0.9?'OK':'Good');
   let air='No log';
   if(x.ar.known){const e=x.ar.estPsi,Z=x.Z;air=e<Z.low?'Low':(e<Z.good0?'OK':(e<=Z.good1?'Good':(e<=Z.over?'High':'Overfilled')))}
-  const K={Low:'l',OK:'o',Good:'g',High:'h',Overfilled:'l'};return {seal,air,sealKey:K[seal],airKey:K[air],sealTxt:`${seal} - ${vR(x.sl.leftMl)} ${vU()}`,airTxt:x.ar.known?`${air} - ${Math.round(x.ar.estPsi*10)/10} PSI`:'No log yet'};
+  const K={Low:'l',OK:'o',Good:'g',High:'h',Overfilled:'l'};return {seal,air,sealKey:K[seal],airKey:K[air],sealTxt:`${seal} - ${vR(x.sl.leftMl)} ${vU()}`,airTxt:x.ar.known?`${air} - ${Math.round(x.ar.estPsi*10)/10} PSI`:(twS()[x.ar.wheel]?'Waiting for TyreWiz':'No log yet')};
 }
 function sbox(l,v,red){return `<div class="sbox ${red?'red':''}"><small>${l}</small><b>${v}</b></div>`}
 

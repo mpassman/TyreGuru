@@ -1050,6 +1050,7 @@ function viewData(){
   ${srcRow('WHOOP body weight',sx('whoop').refresh?'ok':'no',`${S.weights.filter(w=>w.src==='WHOOP').length} weights`)}
   ${srcRow('Garmin direct','no','Garmin only gives live data to approved partner companies. Connect Garmin to Intervals.icu or Strava instead')}
   ${srcRow('Fitbit, Wahoo, RideWithGPS, Komoot, TrainingPeaks','no','Not offered. Fitbit ended its old interface on 30 Sep 2026. The others need partner approval or have no public access')}
+  ${srcRow('TyreWiz tire sensor',(S.tw&&(S.tw.front||S.tw.rear))?'ok':'no',(S.tw&&(S.tw.front||S.tw.rear))?'Paired. The phone logs what the sensor sends. Reading the pressure number is not finished, so air pressure still uses the estimate':'Pairs when the phone picks up a TyreWiz sensor. Until its pressure signal can be read, the app keeps using the estimate')}
   ${srcRow('TyreGuru sensor','no','Planned. Until then you enter gauge readings and sealant checks by hand')}</div>
   <div class="card"><h2>Import your data</h2>
   <p class="mute" style="margin-top:0">Choose files from your phone or computer. Several at once is fine. The app reads them on your device and does not upload them.</p>

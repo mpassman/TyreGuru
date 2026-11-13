@@ -745,6 +745,11 @@ function wear(t){
 }
 /* Rated tire life in miles is typed per tire. Miles ridden come from the rides since install (km x 0.621371). No rating typed means no countdown and no mileage alerts. */
 function milesLeft(t){const r=+t.ratedMi||0;if(r<=0)return null;const ridden=wear(t).km*0.621371;return {rated:r,ridden,left:Math.max(0,r-ridden)}}
+/* Replace-tire rule: plugs and flats since install (a puncture the sealant sealed does not count). Warn at rpWarn, urgent at rpUrgent. Defaults 2 and 3; the rider can change them. */
+function repairInfo(t){const ev=((t.sealant&&t.sealant.events)||[]).filter(e=>(e.kind==='plugged'||e.kind==='flat')&&e.dateMs>=(t.installMs||0)),R=S.rider,w=+R.rpWarn>0?+R.rpWarn:2,u=Math.max(+R.rpUrgent>0?+R.rpUrgent:3,w),n=ev.length;
+  return {n,plugs:ev.filter(e=>e.kind==='plugged').length,flats:ev.filter(e=>e.kind==='flat').length,warn:w,urgent:u,lv:n>=u?'0':(n>=w?'50':'')}}
+/* One level per tire from both rules: '' fine, '50' smoke-alarm level, '0' siren level. */
+function tireLv(t){const q=milesLeft(t),m=!q?'':(q.left<=0?'0':(q.left<=50?'50':'')),r=repairInfo(t).lv;return (m==='0'||r==='0')?'0':((m==='50'||r==='50')?'50':'')}
 function rideC(){return now.airC!=null?now.airC:(S.nowC!=null&&S.nowC!==''?+S.nowC:null)}
 function advice(t){
   const a=S.a,nowMs=Date.now();
@@ -805,7 +810,7 @@ function tireForm(t){
   <div class="row"><div><label for="${n}i">Tire installed on</label><input id="${n}i" type="date" data-d="tires.${i}.installMs" value="${fmtD(t.installMs)}"></div>
   <div><label for="${n}c">Tire condition</label><select id="${n}c" data-f="tires.${i}.condition">${['auto','new','good','fair','poor'].map(c=>`<option value="${c}" ${t.condition===c?'selected':''}>${c==='auto'?'Automatic, from install date and mileage':c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}</select></div></div>
   <div class="row"><div><label for="${n}rm">Rated tire life, miles</label><input id="${n}rm" type="number" min="0" inputmode="numeric" data-f="tires.${i}.ratedMi" value="${t.ratedMi||''}" placeholder="e.g. 3000"></div></div>
-  ${(()=>{const q=milesLeft(t);return `<p class="mute">${q?`Ridden on this tire since install: ${Math.round(q.ridden).toLocaleString()} miles. Left: ${Math.round(q.left).toLocaleString()} miles. A smoke-alarm alert sounds once at 50 miles or less, and a fire-alarm siren sounds once at 0.`:'Enter what this tire is rated to last. Leave it blank for no mileage countdown and no mileage alerts.'}</p>`})()}
+  ${(()=>{const q=milesLeft(t),ri=repairInfo(t);return `<p class="mute">${q?`Ridden on this tire since install: ${Math.round(q.ridden).toLocaleString()} miles of ${q.rated.toLocaleString()} rated. Left: ${Math.round(q.left).toLocaleString()} miles. A smoke-alarm alert sounds once at 50 miles or less, and a fire-alarm siren sounds once at 0.`:'Enter what the manufacturer rates this tire to last. Leave it blank for no mileage countdown and no mileage alerts.'} Repairs since install: ${ri.plugs} plug${ri.plugs===1?'':'s'}, ${ri.flats} flat${ri.flats===1?'':'s'}. The same two alerts sound when plugs and flats reach ${ri.warn} (smoke alarm) and ${ri.urgent} (siren): replace the tire.</p>`})()}
   ${(()=>{const w=wear(t);const mo=Math.round(w.days/30.4);return `<p class="mute">Condition is worked out from the install date and the rides since then (from Strava, Garmin files, Apple Health, Intervals.icu or rides you log). ${dR(w.km)} ${dU()} ridden since ${fmtD(t.installMs)}: ${Math.round(w.f*100)}% of an assumed ${dR(w.life)} ${dU()} life for a ${t.type==='mtb'?'mountain bike':t.type} tire. Installed ${mo===1?'1 month':mo+' months'} ago: ${Math.round(w.fa*100)}% of an assumed ${Math.round(LIFE_DAYS/365)} year age limit. The higher of the two sets the condition, which is ${w.cond}${w.manual?' (set by you)':(w.cond==='new'?'':` (driven by ${w.by})`)}. These tire lives are rough assumptions, not tested.${w.noKm?` ${w.noKm} rides have no distance and are not counted.`:''}${S.rides.length===0?' Connect Strava or import rides in Settings, Data so mileage counts.':''}</p>`})()}
   <div class="row"><div><label for="${n}p">Silca's result for this ${t.wheel} tire, PSI</label><input id="${n}p" type="number" step="0.1" data-cal="${i}" inputmode="decimal" value="${t.cal?t.cal.psi:''}" placeholder="enter Silca's result"></div></div>
   <p class="mute"><b>Calibrate to Silca.</b> (1) Your system weight (rider plus bike) is ${wfmt(Number(S.rider.riderKg)+Number(S.rider.bikeKg))}. Silca asks for the total, in the unit you choose on its page. (2) Open <a href="https://silca.cc/pages/sppc-lite" target="_blank" rel="noopener">Silca's free calculator</a> (or the <a href="https://silca.cc/pages/pro-tire-pressure-calculator" target="_blank" rel="noopener">Pro version</a>) and enter that weight and a measured width of ${t.widthMm} mm. (3) Type the ${t.wheel} result above. The app saves it along with the weight, width and surface it was run with. Your target then equals Silca's number at those settings and moves with changes in weight or width using the app's own estimate. If you change the road surface, run Silca again. ${t.cal?`<br>Saved: ${t.cal.psi} PSI at ${Math.round(t.cal.kg*2.20462)} lb, ${t.cal.widthMm} mm, ${(TG.TERRAIN[t.cal.terrain]||{}).label||t.cal.terrain}.`:`Until then the app shows its own estimate (${TG.targetPsi({riderKg:S.rider.riderKg,bikeKg:S.rider.bikeKg,widthMm:t.widthMm,terrain:S.rider.terrain,wheel:t.wheel})} PSI).`}</p>${same?'':`<div class="row"><div><label for="${n}x">Tire maximum pressure, PSI</label><input id="${n}x" type="number" data-f="tires.${i}.maxPsi" value="${t.maxPsi||''}" placeholder="printed on the sidewall"></div>
@@ -846,6 +851,7 @@ function viewSetup(){
 }
 function srcRow(name,state,detail){return `<div class="src"><span><b>${name}</b><br><span class="mute">${detail}</span></span><span class="tag ${state==='ok'?'green':'grey'}">${state==='ok'?'In use':'Not connected'}</span></div>`}
 /* ---------- Garmin auto sync: the iPhone app sends these numbers to the Edge data field ---------- */
+function lvN(t){const l=t?tireLv(t):'';return l==='0'?2:(l==='50'?1:0)}
 function miF(t){const q=t&&milesLeft(t);return q?Math.round(q.left):-1}
 function garminPayload(){
   const f=S.tires.find(t=>t.wheel==='front')||S.tires[0],r=S.tires.find(t=>t.wheel==='rear')||S.tires[1]||f;
@@ -854,7 +860,7 @@ function garminPayload(){
   const F=get(f),R=get(r),d=new Date(),ymd=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
   return {frontPsi:F.psi,frontTgt:F.tgt,rearPsi:R.psi,rearTgt:R.tgt,maxPsi:isFinite(F.x.A.lim)?Math.round(F.x.A.lim*10)/10:0,
     frontSeal:F.pct,rearSeal:R.pct,sealUnit:us?0:1,frontSealAmt:conv(F.left),frontFull:conv(F.full),rearSealAmt:conv(R.left),rearFull:conv(R.full),
-    frontMi:miF(f),rearMi:miF(r),updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
+    frontMi:miF(f),rearMi:miF(r),frontLv:lvN(f),rearLv:lvN(r),frontRep:repairInfo(f).n,rearRep:repairInfo(r).n,updated:ymd,staleRide:(F.x.st.stale||R.x.st.stale)?1:0,alarmMode:({both:0,vibrate:1,off:2})[AL().mode]||0,dangerOn:AL().danger?1:0,chirpOn:AL().chirp?1:0};
 }
 let _garminLast='';
 function garminHandler(){try{return window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.garmin||null}catch(e){return null}}
@@ -1181,7 +1187,7 @@ function alSchedule(force){const h=alNat();if(!h)return;const a=AL(),items=a.rem
 function alStop(){}
 function alPending(){const a=AL();return a.danger?alDanger().filter(q=>!a.ack[q.id]):[]}
 /* Mileage alerts: smoke-alarm beeps once when a tire reaches 50 miles left or less, fire-alarm siren once at 0. The level is remembered per tire so each sounds only once. */
-function milesCheck(a,allowed){if(!a.mi)a.mi={};let kind=null,dirty=false;S.tires.forEach(t=>{const q=milesLeft(t),lv=!q?'':(q.left<=0?'0':(q.left<=50?'50':'')),prev=a.mi[t.wheel]||'';
+function milesCheck(a,allowed){if(!a.mi)a.mi={};let kind=null,dirty=false;S.tires.forEach(t=>{const lv=tireLv(t),prev=a.mi[t.wheel]||'';
   if(lv===prev)return;if(!allowed)return;a.mi[t.wheel]=lv;dirty=true;if(lv==='0')kind='mi0';else if(lv==='50'&&kind!=='mi0')kind='mi50'});return {kind,dirty}}
 function checkAlerts(){const a=AL(),d=alDanger(),ids=d.map(q=>q.id);let dirty=false;
   Object.keys(a.ack).forEach(k=>{if(!ids.includes(k)){delete a.ack[k];dirty=true}});
@@ -1465,6 +1471,7 @@ function viewBike(){
   ${alertsCard()}<div class="card"><h3 style="margin-top:0">Tires</h3>${rows}<p class="mute" style="margin:6px 0 0">Edit a tire for brand, model, widths, rim width, install date, condition and sealant. The maximum pressure fills in from the app's tire list.</p></div>
   <div class="card"><h3 style="margin-top:0">Main terrain</h3><div class="row"><div><label for="tr">Road surface (Silca style)</label><select id="tr" data-f="rider.terrain">${Object.entries(TG.TERRAIN).map(([v,o])=>`<option value="${v}" ${S.rider.terrain===v?'selected':''}>${o.label}</option>`).join('')}</select></div>
   <div><label for="sf">Usual surface</label><select id="sf" data-f="rider.surface">${Object.keys(ENV.SURFACE).map(v=>`<option value="${v}" ${S.rider.surface===v?'selected':''}>${({chipseal:'Chip seal'})[v]||v.charAt(0).toUpperCase()+v.slice(1)}</option>`).join('')}</select></div></div></div>
+  <div class="card"><h3 style="margin-top:0">Replace-tire alerts</h3><p class="mute" style="margin-top:0">A plug or a flat counts. A puncture the sealant sealed does not. These are the same two alerts as the miles-left rule, per tire.</p><div class="row"><div><label for="rw">Smoke-alarm alert at this many plugs and flats</label><input id="rw" type="number" min="1" inputmode="numeric" data-f="rider.rpWarn" value="${S.rider.rpWarn||2}"></div><div><label for="ru">Siren alert at this many</label><input id="ru" type="number" min="1" inputmode="numeric" data-f="rider.rpUrgent" value="${S.rider.rpUrgent||3}"></div></div></div>
   <details class="card"><summary>Quick start</summary><p class="mute">Fills both tires with the Pirelli P Zero Race TLR 4S, 32 mm, an 80 PSI maximum, and your Silca results (rear 60.5 PSI, front 59 PSI at 135 lb, worn pavement). Your weights and everything else stay as they are.</p><button data-act="pirelli">Use my Pirelli 32 mm</button></details>
   ${hist.length?`<div class="card"><h3 style="margin-top:0">Tire history</h3><div class="scroll"><table><thead><tr><th>Wheel</th><th>Tire</th><th>Width</th><th>Installed</th><th>Removed</th><th>Distance</th></tr></thead><tbody>${hist.map(h=>`<tr><td>${h.wheel}</td><td>${esc((h.brand+' '+h.model).trim())}</td><td>${h.widthMm} mm</td><td>${fmtD(h.installMs)}</td><td>${fmtD(h.removedMs)}</td><td>${dR(h.km)} ${dU()}</td></tr>`).join('')}</tbody></table></div></div>`:''}
   <button data-tab="home" style="width:100%">Save and see my tires</button><p class="mute">Everything you enter saves on this device automatically.</p>`;
@@ -2044,7 +2051,7 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}
 pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();
 document.addEventListener('visibilitychange',()=>{if(document.hidden){alHiddenAt=Date.now();return}if(!document.hidden){if(alHiddenAt&&Date.now()-alHiddenAt>30000)alOpenCheck();alHiddenAt=0;try{if(tab==='home'&&detail===null)render(true);else checkAlerts()}catch(e){}autoLocate();autoHealth();stravaSync();syncAll()}});
 let alBeat=Date.now();setInterval(()=>{const n=Date.now();if(n-alBeat>30000&&!document.hidden)alOpenCheck();alBeat=n},2000);window.addEventListener('pageshow',ev=>{if(ev.persisted)alOpenCheck()});
-window.__TG={get S(){return S},xweatherRoad,logRoad,applyRoadLog,roadLog,get now(){return now},importFiles,render,alOpenCheck,garminPayload,checkAlerts,milesLeft,wear,alUnlock,alFire,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
+window.__TG={get S(){return S},xweatherRoad,logRoad,applyRoadLog,roadLog,get now(){return now},importFiles,render,alOpenCheck,garminPayload,checkAlerts,milesLeft,repairInfo,tireLv,wear,alUnlock,alFire,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};
 })();
 
 </script>

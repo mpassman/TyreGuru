@@ -1129,7 +1129,7 @@ function adjustCard(i){const t=S.tires[i],nm=t.wheel==='front'?'Front':'Rear',x=
   <p class="mute" id="adj${i}" aria-live="polite" style="margin:6px 0 0">${esc(msg['a'+i]||'')}</p></div>`}
 function viewLog(){
   const opts=S.tires.map((t,i)=>`<option value="${i}"${i===logTi?' selected':''}>${t.wheel==='front'?'Front':'Rear'}</option>`).join('');
-  const hist=[];S.tires.forEach(t=>{t.fills.forEach(f=>hist.push([f.dateMs,t.wheel,`Air ${f.beforePsi!=null?(Math.round(f.beforePsi*10)/10)+' → ':''}${Math.round(f.afterPsi*10)/10} PSI${f.beforePsi!=null&&f.afterPsi<f.beforePsi-0.05?' (air let out)':''}${f.src==='tyrewiz'?' · from TyreWiz':''}`]));t.checks.forEach(c=>hist.push([c.dateMs,t.wheel,`Sealant check: ${c.level}`]));t.sealant.events.forEach(e=>hist.push([e.dateMs,t.wheel,e.kind==='removed'?'Sealant removed, '+vfmt(e.ml):'Puncture'+(e.holeMm?' '+e.holeMm+' mm':'')+(e.kind==='flat'?' (flat)':e.kind==='plugged'?' (plugged)':' sealed')+', '+vfmt(e.ml||S.a.mlPerSealEvent)+' sealant lost']));});
+  const hist=[];S.tires.forEach(t=>{t.fills.filter(f=>airSrcTw(t.wheel)===(f.src==='tyrewiz')).forEach(f=>hist.push([f.dateMs,t.wheel,`Air ${f.beforePsi!=null?(Math.round(f.beforePsi*10)/10)+' → ':''}${Math.round(f.afterPsi*10)/10} PSI${f.beforePsi!=null&&f.afterPsi<f.beforePsi-0.05?' (air let out)':''}${f.src==='tyrewiz'?' · from TyreWiz':''}`]));t.checks.forEach(c=>hist.push([c.dateMs,t.wheel,`Sealant check: ${c.level}`]));t.sealant.events.forEach(e=>hist.push([e.dateMs,t.wheel,e.kind==='removed'?'Sealant removed, '+vfmt(e.ml):'Puncture'+(e.holeMm?' '+e.holeMm+' mm':'')+(e.kind==='flat'?' (flat)':e.kind==='plugged'?' (plugged)':' sealed')+', '+vfmt(e.ml||S.a.mlPerSealEvent)+' sealant lost']));});
   hist.sort((a,b)=>b[0]-a[0]);
   const ests=S.tires.map(t=>{const A=advice(t);return {wheel:t.wheel,psi:A.air.known?Math.round(A.air.estPsi):null,tgt:A.tgt,fill:A.air.fillTo,needAir:A.air.needAir,ml:A.sealant.leftMl,needSeal:A.sealant.needAdd,add:A.sealant.addMl}});
   window.__est=ests;
@@ -1410,7 +1410,9 @@ function airCmpTable(t,mode){const rowsOf=(P,lab)=>P.length?`<div class="scroll"
   const f1=v=>(Math.round(v*10)/10).toFixed(1),all=cmpPairs(t).filter(q=>q.metric==='air'),Pg=all.filter(q=>q.source==='gauge').slice(-6).reverse(),Pt=all.filter(q=>q.source==='tyrewiz').slice(-6).reverse();
   const G=mode==='tw'?[]:Pg,T2=mode==='tw'?Pt:[];
   return (G.length?rowsOf(G,'You entered'):'')+(T2.length?rowsOf(T2,'TyreWiz read'):'')+(G.length||T2.length?`<p class="mute" style="margin:6px 0 0">Difference is the app's estimate minus the measured pressure ${mode==='tw'?'the TyreWiz reading, one per day':'your gauge reading just before a fill'}. <b style="color:var(--green)">Close</b>: within 2 PSI. <b style="color:var(--zo)">Off</b>: 2 to 4 PSI. <b style="color:var(--red)">Far</b>: more than 4 PSI.</p>`:'')}
-function airTrendCard(t){const hasTw=!!twS()[t.wheel]||twHist(t.wheel).length>0,u=airChart(t,'user');if(typeof u==='string')return u;return u.card+(hasTw?airChart(t,'tw').card:'')+u.stats}
+/* a tire shows only the source it uses: its paired TyreWiz, or else your own entries */
+function airSrcTw(wheel){return !!twS()[wheel]}
+function airTrendCard(t){const u=airChart(t,airSrcTw(t.wheel)?'tw':'user');if(typeof u==='string')return u;return u.card+u.stats}
 /* Two charts with the same layout: the estimate (white) against one kind of measured data. mode 'user' = what you entered; mode 'tw' = what the TyreWiz read. */
 function airChart(t,mode){const TW=mode==='tw';
   const f=(t.fills||[]).slice().sort((a,b)=>a.dateMs-b.dateMs),shAll=twHist(t.wheel);
@@ -1522,7 +1524,7 @@ function cmpRolling(P,k){return P.map((x,i)=>{const w=P.slice(Math.max(0,i-k+1),
 function cmpCard(){
   const SER=[['front_air','Front air','#1f78d1',''],['rear_air','Rear air','#1f78d1','5 4'],['front_air_tyrewiz','Front air vs TyreWiz','#1aa58f',''],['rear_air_tyrewiz','Rear air vs TyreWiz','#1aa58f','5 4'],['front_sealant','Front sealant','#d9730d',''],['rear_sealant','Rear sealant','#d9730d','5 4']];
   const all={};S.tires.forEach(t=>cmpPairs(t).forEach(q=>(all[q.series]=all[q.series]||[]).push(q)));
-  const has=SER.filter(q=>all[q[0]]&&all[q[0]].length);
+  const has=SER.filter(q=>all[q[0]]&&all[q[0]].length&&(!/_air/.test(q[0])||airSrcTw(q[0].split('_')[0])===/tyrewiz$/.test(q[0])));
   const intro=`<p class="mute" style="margin-top:0">Every time you enter a gauge reading, a dipstick reading or a sealant check, the app compares it with what it had estimated just before. As more readings come in, the gap should shrink. Air is compared in PSI; sealant in points of the starting dose.</p>`;
   if(!has.length)return `<div class="card"><h3 style="margin-top:0">Estimate versus what you entered</h3>${intro}<p class="mute" style="margin:0">Nothing to compare yet. Enter a gauge reading at least half a day after a fill, a dipstick reading, or a sealant check.</p></div>`;
   const W=320,H=170,L=34,R=8,T=12,B=26,srs=has.map(q=>({q,r:cmpRolling(all[q[0]],5)})),ms0=Math.min(...srs.map(s=>s.r[0].ms)),ms1=Math.max(Date.now(),...srs.map(s=>s.r[s.r.length-1].ms)),mx=Math.max(2,...srs.map(s=>Math.max(...s.r.map(x=>x.v)))),top=Math.ceil(mx),

@@ -902,8 +902,8 @@ function twAutoLog(wheel,psi,nw,last){try{const t=S.tires.find(x=>x.wheel===whee
   if(last&&nw-last.ms<=10*60000&&last.psi-psi>=2){add(nw,last.psi,psi);st.lo=psi;return}
   if(psi<st.lo)st.lo=psi;else if(psi>=st.lo+1.5)st.pend={before:st.lo,peak:psi,ms:nw}}catch(e){}}
 window.__twAuto=function(w,p,ms){const h=twS()[w].hist||(twS()[w].hist=[]);twAutoLog(w,p,ms,h[h.length-1]);h.push({ms,psi:p})};
-window.__tyrewizData=function(o){try{const w=twS();if(o.kind==='value'||o.kind==='found'){w.log.push({t:Date.now(),s:(o.svc||'').slice(0,8),c:(o.chr||'').slice(0,8),p:o.props,h:o.hex,k:o.kind});if(w.log.length>150)w.log.splice(0,w.log.length-150)}
-  if(o.kind==='value'){const d=twDecode(o);if(d&&d.psi>0){['front','rear'].forEach(k=>{if(w[k]&&w[k].id===o.id){w[k].psi=d.psi;w[k].at=Date.now();const h=w[k].hist||(w[k].hist=[]),l=h[h.length-1],nw=Date.now();twAutoLog(k,d.psi,nw,l);if(!l||nw-l.ms>=5*60000||Math.abs(l.psi-d.psi)>=0.3){h.push({ms:nw,psi:Math.round(d.psi*10)/10});if(h.length>3000)h.splice(0,h.length-3000)}}});render(true)}}save()}catch(e){}};
+window.__tyrewizData=function(o){try{const w=twS();if(o.kind==='value'||o.kind==='found'){w.log.push({t:o.ts||Date.now(),s:(o.svc||'').slice(0,8),c:(o.chr||'').slice(0,8),p:o.props,h:o.hex,k:o.kind});if(w.log.length>150)w.log.splice(0,w.log.length-150)}
+  if(o.kind==='value'){const d=twDecode(o);if(d&&d.psi>0){['front','rear'].forEach(k=>{if(w[k]&&w[k].id===o.id){const nw=o.ts||Date.now();w[k].psi=d.psi;w[k].at=nw;const h=w[k].hist||(w[k].hist=[]),l=h[h.length-1];twAutoLog(k,d.psi,nw,l);if(!l||nw-l.ms>=5*60000||Math.abs(l.psi-d.psi)>=0.3){h.push({ms:nw,psi:Math.round(d.psi*10)/10});if(h.length>3000)h.splice(0,h.length-3000)}}});render(true)}}save()}catch(e){}};
 /* Pairing flow: pick a tire slot, spin the wheel to wake the sensor, choose it from the list (name, signal) - or answer the popup when the
    phone hears an unpaired sensor. Several sensors can be heard at once; popups queue and only free tire slots are offered. */
 const twSeen={},twSnooze={};

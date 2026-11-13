@@ -353,6 +353,16 @@
    "srcUrl": "https://m.bikeforums.net/showthread.php?p=22564204",
    "note": "Bike Forums: several riders report about 500 to 600 miles per rear tire (one reports over 2,000 on trails)",
    "unreliable": true
+  },
+  {
+   "brand": "schwalbe",
+   "model": "g one",
+   "kind": "rider",
+   "lowMi": 1800,
+   "highMi": 2000,
+   "srcUrl": "https://www.biketiresdirect.com/reviews/schwalbe-g-one-speed-pro-29-inch-tire",
+   "note": "BikeTiresDirect reviews of the G-One Speed Pro (same family, not the RS Pro): usual rear life 1,800 to 2,000 mi; reports range 500 to 5,000",
+   "unreliable": true
   }
  ],
  "lifeNote": "Tread life is not published by most makers. These are rider-reported ranges, unreliable, and depend on rider weight, surface, pressure and rear vs front. Schwalbe only gives a generic 2,000 to 5,000 km for standard tires (schwalbe.com/en/technology-faq/tire-wear/)."

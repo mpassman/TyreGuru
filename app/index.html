@@ -1336,6 +1336,7 @@ function sumCard(t){
   const i=S.tires.indexOf(t),x=tireStatus(t),L=levelWord(x),nm=t.wheel==='front'?'Front':'Rear';
   const old=x.st.stale&&!x.red;   // red stays strong; only green and yellow are softened when the reading is out of date
   return `<div class="card big ${x.red?'red':'green'}${old?' stale':''}"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${nm} tire</h2><span class="tag ${old?'grey':(x.red?'red':'green')}">${old?'? OLD READING':(x.red?'✕ RED':'✓ GREEN')}</span></div>
+  ${(()=>{const q=milesLeft(t),lv=tireLv(t);if(!q&&!lv)return '';const w=lv==='0'?'var(--red)':(lv==='50'?'#d99a1e':'inherit');return `<p style="margin:4px 0 0;font-weight:600;color:${w}">${lv&&(!q||q.left>50)?'Replace tire '+(lv==='0'?'now':'soon'):Math.round(q.left).toLocaleString()+' miles left on tire'}</p>`})()}
   ${x.st.stale?`<p class="stalenote" role="status"><b>Last reading was before your last ride (${fmtD(x.st.rideMs)}).</b> Check pressure and look for signs of punctures and sealant leaks before you ride, then log what you find.</p>`:''}
   ${gaugeRow(t,x,L,{air:'',seal:''})}${patternsOn()?'<p class="mute" style="margin:0;font-size:11px;text-align:center">Stripes = low · dots = OK · solid = good · grid = too high · cross-hatch red = overfilled</p>':''}
   <p class="fix" style="${(x.ar.known&&!x.ar.needAir&&x.airRed)?'color:var(--red)':''}">${x.red?x.fix:(old?'Check before you ride':(x.ar.known?'Good':'Log an air fill to start'))}</p>

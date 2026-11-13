@@ -647,7 +647,7 @@ const wu=()=>(S&&S.rider&&S.rider.wUnit)||'lb';
 const fw=kg=>wu()==='lb'?Math.round(kg*2.20462*10)/10:Math.round(kg*10)/10;
 const wfmt=kg=>fw(kg)+' '+wu();
 const SYNC=['brand','model','type','widthMm','nominalMm','rimMm','maxPsi','maxAuto','maxManual','hookless'];
-function syncRear(){if(!S.tires||S.tires.length<2)return;const f=S.tires[0],r=S.tires[1];if(S.rearSame!==false)SYNC.forEach(k=>{r[k]=f[k]});if(S.sealSame!==false&&f.sealant&&r.sealant){r.sealant.brand=f.sealant.brand;r.doseLevel=f.doseLevel;r.sealant.ml=f.sealant.ml;r.sealant.dateMs=f.sealant.dateMs}}
+function syncRear(){if(!S.tires||S.tires.length<2)return;const f=S.tires[0],r=S.tires[1];if(S.rearSame!==false){SYNC.forEach(k=>{r[k]=f[k]});autoLife(r)}if(S.sealSame!==false&&f.sealant&&r.sealant){r.sealant.brand=f.sealant.brand;r.doseLevel=f.doseLevel;r.sealant.ml=f.sealant.ml;r.sealant.dateMs=f.sealant.dateMs}}
 function sameTires(){const f=S.tires[0],r=S.tires[1];return !!(f&&r&&(f.brand||'')===(r.brand||'')&&(f.model||'')===(r.model||'')&&f.nominalMm===r.nominalMm&&f.type===r.type)}
 function loadJson(j){try{if(j){S=JSON.parse(j);if(S.rider){S.rider.terrain=({road:'worn',gravel:'gravel4'})[S.rider.terrain]||S.rider.terrain}S.a=Object.assign({},TG.DEFAULTS,S.a||{});S.tires.forEach(t=>{if(!t.type)t.type='gravel';if(t.model==null)t.model='';if(!t.nominalMm)t.nominalMm=Math.round(t.widthMm);if(t.silcaPsi>0&&!t.cal)t.cal={psi:t.silcaPsi,kg:S.rider.riderKg+S.rider.bikeKg,widthMm:t.widthMm,terrain:S.rider.terrain}});if(S.rider.wManual===undefined)S.rider.wManual=true;if(S.rider.terrManual===undefined)S.rider.terrManual=true;if(S.rearSame===undefined)S.rearSame=sameTires();if(S.sealSame===undefined){const a=S.tires[0].sealant,b=S.tires[1]&&S.tires[1].sealant;S.sealSame=!!(a&&b&&a.brand===b.brand&&a.ml===b.ml&&a.dateMs===b.dateMs)}return true}}catch(e){}return false}
 function load(){let j=null;try{j=localStorage.getItem(KEY)}catch(e){}j=j||window.__nativeState||null;if(!loadJson(j))S=example();if(S&&S.rider&&S.rider.units===undefined){const m=regionMetric();S.rider.units=m?'metric':'us';if(!S.rider.wUnit)S.rider.wUnit=m?'kg':'lb'}}
@@ -721,7 +721,23 @@ function lookupMax(t){
   }
   return best;
 }
+/* Tread life found in published reviews. Fills the Rated tire life box only while the box is blank or still holds an earlier auto value; a number the rider types always stays. */
+const LIFE_DB=[
+ {brand:'continental',model:'grand prix 5000',lowMi:2500,highMi:4000,src:'https://m.bikeforums.net/showthread.php?p=22401577'},
+ {brand:'continental',model:'gp5000',lowMi:2500,highMi:4000,src:'https://m.bikeforums.net/showthread.php?p=22401577'},
+ {brand:'schwalbe',model:'pro one',lowMi:1900,highMi:3000,src:'https://www.bikeforums.net/road-cycling/1241917-schwalbe-pro-one-tle-tire-user-experience.html'},
+ {brand:'pirelli',model:'p zero race tlr 4s',lowMi:3000,highMi:5000,src:'https://www.google.com/search?q=Pirelli+P+Zero+Race+TLR+4S+tire+mileage+life'},
+ {brand:'vittoria',model:'corsa pro',lowMi:2500,highMi:2500,src:'https://theproscloset.com/blogs/news/2-000-miles-later-vittoria-corsa-pro-tlr-g2-0-long-term-review'}];
+function lookupLife(t){const b=tok(t.brand),m=tok(t.model);let best=null;
+  for(const e of LIFE_DB){if(!tok(e.brand).every(x=>b.includes(x)))continue;const et=tok(e.model);if(!et.every(x=>m.includes(x)))continue;if(!best||et.length>tok(best.model).length)best=e}
+  return best}
+function autoLife(t){
+  if(t.ratedMi>0&&!t.ratedAuto)return;
+  const e=lookupLife(t);
+  if(e){t.ratedMi=e.lowMi;t.ratedAuto=e.src}else if(t.ratedAuto){t.ratedMi=0;t.ratedAuto=null}
+}
 function autoMax(t){
+  autoLife(t);
   if(t.maxManual)return;
   const e=lookupMax(t);
   if(e){t.maxPsi=e.psi;t.maxAuto=e.src}else if(t.maxAuto){t.maxPsi=0;t.maxAuto=null}
@@ -813,6 +829,7 @@ function tireForm(t){
   <div class="row"><div><label for="${n}i">Tire installed on</label><input id="${n}i" type="date" data-d="tires.${i}.installMs" value="${fmtD(t.installMs)}"></div>
   <div><label for="${n}c">Tire condition</label><select id="${n}c" data-f="tires.${i}.condition">${['auto','new','good','fair','poor'].map(c=>`<option value="${c}" ${t.condition===c?'selected':''}>${c==='auto'?'Automatic, from install date and mileage':c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}</select></div></div>
   <div class="row"><div><label for="${n}rm">Rated tire life, miles</label><input id="${n}rm" type="number" min="0" inputmode="numeric" data-f="tires.${i}.ratedMi" value="${t.ratedMi||''}" placeholder="e.g. 3000"></div></div>
+  ${t.ratedAuto?`<p class="mute">Filled in from published reviews of this tire (<a href="${esc(t.ratedAuto)}" target="_blank" rel="noopener">source</a>). Type your own number to replace it.</p>`:''}
   ${(()=>{const q=milesLeft(t),ri=repairInfo(t);return `<p class="mute">${q?`Ridden on this tire since install: ${Math.round(q.ridden).toLocaleString()} miles of ${q.rated.toLocaleString()} rated. Left: ${Math.round(q.left).toLocaleString()} miles. A smoke-alarm alert sounds once at 50 miles or less, and a fire-alarm siren sounds once at 0.`:'Enter what the manufacturer rates this tire to last. Leave it blank for no mileage countdown and no mileage alerts.'} Repairs since install: ${ri.plugs} plug${ri.plugs===1?'':'s'}, ${ri.flats} flat${ri.flats===1?'':'s'}. The same two alerts sound when plugs and flats reach ${ri.warn} (smoke alarm) and ${ri.urgent} (siren): replace the tire.</p>`})()}
   ${(()=>{const w=wear(t);const mo=Math.round(w.days/30.4);return `<p class="mute">Condition is worked out from the install date and the rides since then (from Strava, Garmin files, Apple Health, Intervals.icu or rides you log). ${dR(w.km)} ${dU()} ridden since ${fmtD(t.installMs)}: ${Math.round(w.f*100)}% of an assumed ${dR(w.life)} ${dU()} life for a ${t.type==='mtb'?'mountain bike':t.type} tire. Installed ${mo===1?'1 month':mo+' months'} ago: ${Math.round(w.fa*100)}% of an assumed ${Math.round(LIFE_DAYS/365)} year age limit. The higher of the two sets the condition, which is ${w.cond}${w.manual?' (set by you)':(w.cond==='new'?'':` (driven by ${w.by})`)}. These tire lives are rough assumptions, not tested.${w.noKm?` ${w.noKm} rides have no distance and are not counted.`:''}${S.rides.length===0?' Connect Strava or import rides in Settings, Data so mileage counts.':''}</p>`})()}
   <div class="row"><div><label for="${n}p">Silca's result for this ${t.wheel} tire, PSI</label><input id="${n}p" type="number" step="0.1" data-cal="${i}" inputmode="decimal" value="${t.cal?t.cal.psi:''}" placeholder="enter Silca's result"></div></div>
@@ -1811,7 +1828,7 @@ document.addEventListener('input',ev=>{
   if(e.dataset.wunit){S.rider.wUnit=e.value;save();render();return}
   if(e.dataset.wk){if(e.dataset.wk==='riderKg')S.rider.wManual=true;const v=parseFloat(e.value);S.rider[e.dataset.wk]=isNaN(v)?0:(wu()==='lb'?v/2.20462:v);S.example=false;save()}
   else if(e.dataset.f){const mm=/^tires\.(\d+)\.(\w+)$/.exec(e.dataset.f);setPath(e.dataset.f,e.type==='number'?(e.value===''?0:+e.value):(e.dataset.f.endsWith('.hookless')?e.value==='1':e.value));S.example=false;
-    if(mm){const t=S.tires[+mm[1]];if(mm[2]==='maxPsi'){t.maxManual=t.maxPsi>0;t.maxAuto=null;if(!t.maxPsi)t.maxManual=false}if(mm[2]==='type')t.typeManual=true;if(mm[2]==='widthMm')t.measManual=true;if(mm[2]==='nominalMm'&&!t.measManual)t.widthMm=t.nominalMm;if(['brand','model','nominalMm'].includes(mm[2])){if(!t.typeManual){const g=typeGuess(t);if(g)t.type=g}autoMax(t);if(+mm[1]===0)autoTerrain()}}
+    if(mm){const t=S.tires[+mm[1]];if(mm[2]==='maxPsi'){t.maxManual=t.maxPsi>0;t.maxAuto=null;if(!t.maxPsi)t.maxManual=false}if(mm[2]==='ratedMi')t.ratedAuto=null;if(mm[2]==='type')t.typeManual=true;if(mm[2]==='widthMm')t.measManual=true;if(mm[2]==='nominalMm'&&!t.measManual)t.widthMm=t.nominalMm;if(['brand','model','nominalMm'].includes(mm[2])){if(!t.typeManual){const g=typeGuess(t);if(g)t.type=g}autoMax(t);if(+mm[1]===0)autoTerrain()}}
     if(e.dataset.f==='rider.terrain')S.rider.terrManual=true;
     syncRear();save()}
   else if(e.dataset.d){if(e.value){setPath(e.dataset.d,toMs(e.value));S.example=false;syncRear();save()}}
@@ -2139,6 +2156,7 @@ const TIRES_URL='https://raw.githubusercontent.com/mpassman/TyreGuru/main/tires.
 const TIRE_BUILTIN=TIRE_DB.slice();
 function setTires(j){if(!j||!Array.isArray(j.tires))return false;
   const ok=j.tires.filter(e=>e&&typeof e.brand==='string'&&typeof e.model==='string'&&e.nominal>=20&&e.nominal<=90&&e.psi>=15&&e.psi<=160).map(e=>{const o={brand:e.brand.toLowerCase(),model:e.model.toLowerCase(),nominal:+e.nominal,psi:+e.psi,src:e.src==='researched'?('found online, '+(e.srcUrl||'')):(e.src||'bicyclerollingresistance.com')};if(Array.isArray(e.not))o.not=e.not;if(e.tol)o.tol=+e.tol;return o});
+  if(Array.isArray(j.life)){const lf=j.life.filter(e=>e&&typeof e.brand==='string'&&typeof e.model==='string'&&e.lowMi>=300&&e.highMi>=e.lowMi&&e.highMi<=20000&&/^https:/.test(e.srcUrl||'')).map(e=>({brand:e.brand.toLowerCase(),model:e.model.toLowerCase(),lowMi:+e.lowMi,highMi:+e.highMi,src:e.srcUrl}));if(lf.length)LIFE_DB.length=0,lf.forEach(e=>LIFE_DB.push(e))}
   if(!ok.length)return false;const keys=new Set(ok.map(e=>e.brand+'|'+e.model+'|'+e.nominal));
   TIRE_DB.length=0;ok.forEach(e=>TIRE_DB.push(e));TIRE_BUILTIN.forEach(e=>{if(!keys.has(e.brand+'|'+e.model+'|'+e.nominal))TIRE_DB.push(e)});return true}
 (function(){try{const c=localStorage.getItem('tg_tires');if(c&&setTires(JSON.parse(c)))render()}catch(e){}

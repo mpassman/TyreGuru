@@ -303,6 +303,26 @@
    "srcUrl": "https://theproscloset.com/blogs/news/2-000-miles-later-vittoria-corsa-pro-tlr-g2-0-long-term-review",
    "note": "One reviewer: about 2,500 mi total life",
    "unreliable": true
+  },
+  {
+   "brand": "pirelli",
+   "model": "p zero race tlr 4s",
+   "kind": "rider",
+   "lowMi": 3000,
+   "highMi": 5000,
+   "srcUrl": "https://www.google.com/search?q=Pirelli+P+Zero+Race+TLR+4S+tire+mileage+life",
+   "note": "Supplied by the rider from a Google summary that cites Reddit: 3,000 to 5,000 mi; not verified against the original posts",
+   "unreliable": true
+  },
+  {
+   "brand": "continental",
+   "model": "gp5000",
+   "kind": "rider",
+   "lowMi": 2500,
+   "highMi": 4000,
+   "srcUrl": "https://m.bikeforums.net/showthread.php?p=22401577",
+   "note": "Bike Forums thread: rear tires reported 2,500 to 4,000 mi (one outlier 8,000)",
+   "unreliable": true
   }
  ],
  "lifeNote": "Tread life is not published by most makers. These are rider-reported ranges, unreliable, and depend on rider weight, surface, pressure and rear vs front. Schwalbe only gives a generic 2,000 to 5,000 km for standard tires (schwalbe.com/en/technology-faq/tire-wear/)."

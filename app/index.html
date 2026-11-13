@@ -894,18 +894,46 @@ function twDecode(o){return null}
 window.__tyrewizStatus=function(t){const e=document.getElementById('twStatus');if(e)e.textContent=t};
 window.__tyrewizData=function(o){try{const w=twS();if(o.kind==='value'||o.kind==='found'){w.log.push({t:Date.now(),s:(o.svc||'').slice(0,8),c:(o.chr||'').slice(0,8),p:o.props,h:o.hex,k:o.kind});if(w.log.length>150)w.log.splice(0,w.log.length-150)}
   if(o.kind==='value'){const d=twDecode(o);if(d&&d.psi>0){['front','rear'].forEach(k=>{if(w[k]&&w[k].id===o.id){w[k].psi=d.psi;w[k].at=Date.now()}});render(true)}}save()}catch(e){}};
-window.__tyrewizSeen=function(o){try{const w=twS();if(twPaired().includes(o.id)||w.asked[o.id]||document.getElementById('twAsk'))return;twAsk(o)}catch(e){}};
-function twAsk(o){const d=document.createElement('div');d.id='twAsk';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Pair TyreWiz');
-  d.style.cssText='position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
-  d.innerHTML=`<div class="card" style="max-width:420px;width:100%;margin:0"><h2 style="margin-top:0">TyreWiz found</h2><p>Your phone picked up a TyreWiz sensor${o.name?' ('+esc(o.name)+')':''}. Do you want to pair it with TyreGuru? Once it is paired you do not need to enter a pressure reading or log a fill: the app takes the pressure from the sensor. If the sensor is out of range, the app falls back to its own estimate.</p><p class="mute" style="margin-top:0">Which tire is it on?</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button data-tw="front">Front tire</button><button data-tw="rear">Rear tire</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="ghost" data-tw="later">Not now</button><button class="ghost" data-tw="never">Don't ask about this sensor</button></div></div>`;
-  d.addEventListener('click',ev=>{const b=ev.target.closest('[data-tw]');if(!b)return;const v=b.dataset.tw,w=twS();
-    if(v==='front'||v==='rear'){w[v]={id:o.id,name:o.name||'TyreWiz',since:Date.now(),psi:null,at:0};w.asked[o.id]=1;twPost({cmd:'pair',id:o.id})}
-    else if(v==='never'){w.asked[o.id]=1}
-    save();d.remove();render(true)});
-  document.body.appendChild(d);const f=d.querySelector('button');if(f)f.focus()}
-function twCard(){if(!twHandler())return '';const w=twS(),rows=['front','rear'].map(k=>{const x=w[k];return `<tr><td>${k==='front'?'Front':'Rear'}</td><td>${x?esc(x.name):'not paired'}</td><td>${x?(twReading(k)?twReading(k).psi.toFixed(1)+' PSI (live)':'estimate (no readable pressure yet)'):'estimate'}</td></tr>`}).join('');
+/* Pairing flow: pick a tire slot, spin the wheel to wake the sensor, choose it from the list (name, signal) - or answer the popup when the
+   phone hears an unpaired sensor. Several sensors can be heard at once; popups queue and only free tire slots are offered. */
+const twSeen={},twSnooze={};
+function twShort(id){return String(id).replace(/-/g,'').slice(-4).toUpperCase()}
+function twLabel(o){const n=o.name||'TyreWiz';return /\d{3,}/.test(n)?n:n+' ...'+twShort(o.id)}
+function twSig(r){return r>=-60?'strong signal':r>=-75?'good signal':'weak signal, probably not yours'}
+function twBars(r){return r>=-60?'▂▄▆█':r>=-70?'▂▄▆':r>=-80?'▂▄':'▂'}
+function twFree(){const w=twS();return ['front','rear'].filter(k=>!w[k])}
+function twWheel(k){return k==='front'?'Front':'Rear'}
+function twCands(){const w=twS(),now=Date.now(),p=twPaired();return Object.values(twSeen).filter(x=>now-x.at<25000&&!p.includes(x.id)).sort((a,b)=>b.rssi-a.rssi)}
+function twAssign(id,k){const w=twS(),x=twSeen[id]||{id:id,name:'TyreWiz'};w[k]={id:id,name:twLabel(x),since:Date.now(),psi:null,at:0};w.asked[id]=1;twPost({cmd:'pair',id:id});save()}
+function twClose(){const d=document.getElementById('twAsk');if(d)d.remove()}
+function twShow(v){let d=document.getElementById('twAsk');
+  if(!d){d=document.createElement('div');d.id='twAsk';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Pair TyreWiz');
+    d.style.cssText='position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+    d.addEventListener('click',twClick);document.body.appendChild(d)}
+  d._v=v;twDraw(d)}
+function twDraw(d){const v=d._v,w=twS();let h='';const btn=(k,t,c)=>`<button${c?' class="ghost"':''} data-tw="${k}">${t}</button>`,row=x=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><div style="min-width:0"><b>${esc(twLabel(x))}</b><br><span class="mute">${twSig(x.rssi)}</span></div><span class="mute" aria-hidden="true">${twBars(x.rssi)}</span><button data-tw="pick:${esc(x.id)}">Pair</button></div>`;
+  if(v.mode==='found'){const x=twSeen[v.id]||{id:v.id,name:'',rssi:-90},fr=twFree();
+    h=`<h2 style="margin-top:0">TyreWiz found nearby</h2><p style="margin:0 0 4px"><b>${esc(twLabel(x))}</b></p><p class="mute" style="margin-top:0">${twSig(x.rssi)}</p><p>Once it is paired you do not need to enter a pressure reading or log a fill for that tire: the app takes the pressure from the sensor. If the sensor is out of range, the app falls back to its own estimate.</p><div style="display:flex;gap:8px;flex-wrap:wrap">${fr.length===1?btn('as:'+fr[0],'Pair as '+twWheel(fr[0]).toLowerCase()+' tire'):btn('slot','Pair it...')}${btn('later','Not now',1)}${btn('never','Don\'t ask about this sensor',1)}</div>`}
+  else if(v.mode==='slot'){const x=twSeen[v.id]||{id:v.id,name:''};
+    h=`<h2 style="margin-top:0">Which tire is it on?</h2><p class="mute" style="margin-top:0">${esc(twLabel(x))}</p><div style="display:flex;gap:8px;flex-wrap:wrap">${twFree().map(k=>btn('as:'+k,twWheel(k)+' tire')).join('')}${btn('later','Cancel',1)}</div>`}
+  else{const c=twCands().filter(x=>!w.asked[x.id]||true);
+    h=`<h2 style="margin-top:0">Pair ${twWheel(v.wheel).toLowerCase()} tire</h2>`+(c.length?`<p class="mute" style="margin-top:0">Pick your sensor. Strongest signal is first. Spin the ${v.wheel} wheel to see which one wakes up.</p>${c.map(row).join('')}`:`<div style="text-align:center;padding:10px 0"><div style="width:48px;height:48px;border-radius:50%;border:3px solid var(--ink);margin:8px auto;opacity:.7"></div><p><b>Searching for TyreWiz...</b></p><p class="mute">Spin the ${v.wheel} wheel a few times to wake the sensor.</p></div>`)+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${btn('cancel','Cancel',1)}</div><p id="twStatus" class="mute" style="margin-bottom:0"></p>`}
+  d.innerHTML=`<div class="card" style="max-width:420px;width:100%;margin:0">${h}</div>`;const f=d.querySelector('button');if(f&&!d._f){f.focus();d._f=1}}
+function twClick(ev){const b=ev.target.closest('[data-tw]');if(!b)return;const d=document.getElementById('twAsk'),v=d._v,k=b.dataset.tw,w=twS();
+  if(k==='slot'){v.mode='slot';twDraw(d);return}
+  if(k.indexOf('as:')===0){twAssign(v.id,k.slice(3));twClose();render(true);setTimeout(twNext,300);return}
+  if(k.indexOf('pick:')===0){twAssign(k.slice(5),v.wheel);twClose();render(true);setTimeout(twNext,300);return}
+  if(k==='never'){w.asked[v.id]=1;save()}
+  if(k==='later'||k==='never'){twSnooze[v.id]=1}
+  twClose();setTimeout(twNext,300)}
+function twNext(){try{if(document.getElementById('twAsk')||!twFree().length)return;const w=twS(),c=twCands().filter(x=>!w.asked[x.id]&&!twSnooze[x.id]);if(c.length)twShow({mode:'found',id:c[0].id})}catch(e){}}
+window.__tyrewizSeen=function(o){try{if(twPaired().includes(o.id))return;twSeen[o.id]={id:o.id,name:o.name||'',rssi:o.rssi==null?-90:o.rssi,at:Date.now()};
+  const d=document.getElementById('twAsk');if(d){if(d._v.mode==='search')twDraw(d);return}twNext()}catch(e){}};
+setInterval(()=>{const d=document.getElementById('twAsk');if(d&&d._v&&d._v.mode==='search')twDraw(d)},3000);
+function twCard(){if(!twHandler())return '';const w=twS(),rows=['front','rear'].map(k=>{const x=w[k],r=x&&twReading(k);
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><div style="min-width:0"><b>${twWheel(k)} tire</b><br><span class="mute">${x?esc(x.name)+' - '+(r?'live':'waiting for TyreWiz'):'Not paired'}</span></div>${r?`<b>${r.psi.toFixed(1)} PSI</b>`:''}${x?`<button class="ghost" data-act="twforget" data-w="${k}">Forget</button>`:`<button data-act="twpair" data-w="${k}">Pair</button>`}</div>`}).join('');
   const lines=w.log.slice(-60).map(r=>`${new Date(r.t).toLocaleTimeString()} ${r.k} svc ${r.s} chr ${r.c} props ${r.p} ${r.h}`).join('\n');
-  return `<div class="card"><h2>TyreWiz sensor</h2><p class="mute" style="margin-top:0">When your phone hears a TyreWiz, the app asks if you want to pair it. A paired sensor's reading is used for that tire while it is fresh; otherwise the app uses its own estimate. SRAM does not publish how the sensor sends pressure, so this version records what the sensor sends and keeps using the estimate until the format is decoded.</p><div class="scroll"><table><thead><tr><th></th><th>Sensor</th><th>Pressure source</th></tr></thead><tbody>${rows}</tbody></table></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0"><button data-act="twscan">Look for TyreWiz again</button><button class="ghost" data-act="twforget">Forget paired sensors</button><button class="ghost" data-act="twcopy">Copy sensor log</button><span id="twStatus" class="mute"></span></div><details><summary>Sensor log (last ${Math.min(60,w.log.length)} messages)</summary><textarea readonly rows="10" style="width:100%;font:11px ui-monospace,monospace">${esc(lines)}</textarea></details></div>`}
+  return `<div class="card"><h2>TyreWiz sensors</h2><p class="mute" style="margin-top:0">Pair a sensor to each tire. When your phone hears an unpaired TyreWiz, the app also offers to pair it. A paired tire does not need a pressure reading: its sensor reading is used while it is fresh, otherwise the app uses its own estimate. SRAM does not publish how the sensor sends pressure, so for now the app records what the sensor sends and keeps using the estimate until the format is decoded.</p>${rows}<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0"><button class="ghost" data-act="twcopy">Copy sensor log</button><span id="twStatus" class="mute"></span></div><details><summary>Sensor log (last ${Math.min(60,w.log.length)} messages)</summary><textarea readonly rows="10" style="width:100%;font:11px ui-monospace,monospace">${esc(lines)}</textarea></details></div>`}
 
 /* ---------- traffic: optional, nudges the road temperature estimate up in heavy traffic ---------- */
 const AI_URL_DEFAULT='';   // paste your deployed AI review address here to ship it built in, or leave empty and enter it in the app (Data tab)
@@ -1605,8 +1633,8 @@ document.addEventListener('click',async ev=>{
   const b=ev.target.closest('[data-act]');if(!b)return;const act=b.dataset.act;
   if(act==='garminconnect'){const h=garminHandler();if(h)h.postMessage('select');return}
   if(act==='garminsend'){pushGarmin(true);return}
-  if(act==='twscan'){const w=twS();w.asked={};save();twPost({cmd:'rescan'});window.__tyrewizStatus&&window.__tyrewizStatus('Looking for a TyreWiz...');return}
-  if(act==='twforget'){const w=twS();twPaired().forEach(id=>twPost({cmd:'forget',id}));w.front=null;w.rear=null;save();render(true);return}
+  if(act==='twpair'){const k=b.dataset.w;Object.keys(twSnooze).forEach(i=>delete twSnooze[i]);twPost({cmd:'rescan'});twShow({mode:'search',wheel:k});return}
+  if(act==='twforget'){const w=twS(),k=b.dataset.w,x=w[k];if(x){twPost({cmd:'forget',id:x.id});delete w.asked[x.id];delete twSnooze[x.id];w[k]=null;save();render(true)}return}
   if(act==='twcopy'){const w=twS(),t=w.log.map(r=>`${new Date(r.t).toISOString()} ${r.k} svc ${r.s} chr ${r.c} props ${r.p} ${r.h}`).join('\n');try{navigator.clipboard.writeText(t).then(()=>window.__tyrewizStatus('Copied.'),()=>window.__tyrewizStatus('Could not copy. Open the log and select the text.'))}catch(e){window.__tyrewizStatus('Could not copy. Open the log and select the text.')}return}
   if(act==='staleok'){staleAck=true;render(true);return}
   const tire=()=>S.tires[+$('#lt').value],dateMs=()=>toMs($('#ld').value);

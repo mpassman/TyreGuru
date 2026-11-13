@@ -763,6 +763,8 @@ function advice(t){
   const fills=t.fills.slice().sort((x,y)=>x.dateMs-y.dateMs);
   const air=TG.airState({lastFill:fills[fills.length-1],fills,targetPsi:tgt,nowMs,nowC:rideC(),nowAltM:now.elevation!=null?now.elevation:null,a});
   if(air.known){air.fillTo=TG.fillForRide(tgt,20,rideC()!=null?rideC():20)}
+  const sw=twReading(t.wheel);   // a live TyreWiz reading replaces the estimate while it is fresh
+  if(sw){const gap=tgt-sw.psi;Object.assign(air,{known:true,estPsi:sw.psi,tgt,gap,days:air.days||0,needAir:gap>0.20*tgt,tooHigh:-gap>0.05*tgt,lowPsi:sw.psi,highPsi:sw.psi,confidence:'sensor',sensor:true});if(!air.leak)air.leak={pct:0,n:0};air.fillTo=TG.fillForRide(tgt,20,rideC()!=null?rideC():20);air.addTo=air.fillTo}
   return {sealant,air,tgt,fromSilca,est,scaled,calStale,overLimit,lim,tgtRaw,limWhy:lm[1],noEtrto:!!t.hookless&&hooklessLimit(t.nominalMm)==null};
 }
 function sealantStateFor(t,rides,nowMs){
@@ -875,7 +877,35 @@ function garminCard(){
   <div class="scroll"><table><thead><tr><th></th><th>Air now, PSI</th><th>Target PSI</th><th>Sealant left</th></tr></thead><tbody><tr><td>Front</td><td>${F.now?F.now.toFixed(1):'no log'}</td><td>${F.tgt.toFixed(1)}</td><td>${F.seal}%</td></tr><tr><td>Rear</td><td>${R.now?R.now.toFixed(1):'no log'}</td><td>${R.tgt.toFixed(1)}</td><td>${R.seal}%</td></tr></tbody></table></div>
   <p class="mute">Tire maximum PSI for the field: ${isFinite(x0.A.lim)?x0.A.lim:'none set (the field uses target + 4 x tolerance)'}.</p><p class="mute">The Edge sounds the alarm once when a dial turns red and chirps once when both tires are optimal. Alert sound on the Edge: ${({both:'sound and vibration',vibrate:'vibration only',off:'silent'})[AL().mode]||'sound and vibration'}; danger alarm ${AL().danger?'on':'off'}; chirp ${AL().chirp?'on':'off'}. Set the same in the field's Garmin Connect settings.</p><p class="mute">The Edge will show: Front ${F.air}, Rear ${R.air}; sealant ${F.sealWord} (front), ${R.sealWord} (rear). Updated date for the settings: ${ymd}</p>
   ${garminHandler()?`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0"><button data-act="garminconnect">Connect Garmin Edge</button><button data-act="garminsend">Send now</button><span id="garminStatus" class="mute"></span></div><p class="mute">Once connected, this app sends the numbers above to the Edge data field by itself whenever they change, so you do not type them into Garmin Connect. Needs Garmin Connect on this iPhone, the Edge paired to it, and the TyreGuru data field installed on the Edge.</p>`:''}
-  <details><summary>properties.xml block</summary><textarea readonly rows="16" style="width:100%;font:12px ui-monospace,monospace">${esc(xml)}</textarea></details></div>`}
+  <details><summary>properties.xml block</summary><textarea readonly rows="16" style="width:100%;font:12px ui-monospace,monospace">${esc(xml)}</textarea></details></div>`+twCard()}
+/* ---------- TyreWiz (Bluetooth) ----------
+   The iPhone app listens for a TyreWiz sensor. Only when one is heard does a popup ask to pair it (front or rear tire).
+   While a paired sensor gives a fresh reading (under 30 minutes old) it replaces the estimate for that tire; otherwise the app keeps using
+   its own estimate. SRAM does not publish the sensor's Bluetooth format, so for now the raw messages are only logged (twDecode returns null). */
+function twHandler(){try{return window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.tyrewiz||null}catch(e){return null}}
+function twS(){if(!S.tw)S.tw={front:null,rear:null,asked:{},log:[]};if(!S.tw.asked)S.tw.asked={};if(!S.tw.log)S.tw.log=[];return S.tw}
+function twPaired(){const w=twS();return [w.front,w.rear].filter(Boolean).map(x=>x.id)}
+function twReading(wheel){try{const w=S&&S.tw&&S.tw[wheel];return w&&w.psi!=null&&Date.now()-w.at<30*60*1000?w:null}catch(e){return null}}
+function twPost(o){const h=twHandler();if(h)try{h.postMessage(JSON.stringify(o))}catch(e){}}
+function twStart(){if(twHandler())twPost({cmd:'watch',paired:twPaired()})}
+/* Turn the sensor's raw bytes into PSI. Not known yet: fill this in once the format is worked out from the log. Return {psi:number} or null. */
+function twDecode(o){return null}
+window.__tyrewizStatus=function(t){const e=document.getElementById('twStatus');if(e)e.textContent=t};
+window.__tyrewizData=function(o){try{const w=twS();if(o.kind==='value'||o.kind==='found'){w.log.push({t:Date.now(),s:(o.svc||'').slice(0,8),c:(o.chr||'').slice(0,8),p:o.props,h:o.hex,k:o.kind});if(w.log.length>150)w.log.splice(0,w.log.length-150)}
+  if(o.kind==='value'){const d=twDecode(o);if(d&&d.psi>0){['front','rear'].forEach(k=>{if(w[k]&&w[k].id===o.id){w[k].psi=d.psi;w[k].at=Date.now()}});render(true)}}save()}catch(e){}};
+window.__tyrewizSeen=function(o){try{const w=twS();if(twPaired().includes(o.id)||w.asked[o.id]||document.getElementById('twAsk'))return;twAsk(o)}catch(e){}};
+function twAsk(o){const d=document.createElement('div');d.id='twAsk';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Pair TyreWiz');
+  d.style.cssText='position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+  d.innerHTML=`<div class="card" style="max-width:420px;width:100%;margin:0"><h2 style="margin-top:0">TyreWiz found</h2><p>Your phone picked up a TyreWiz sensor${o.name?' ('+esc(o.name)+')':''}. Do you want to pair it with TyreGuru? While it is paired, the app uses its pressure reading instead of the estimate. If it is not available, the app keeps using its own estimate.</p><p class="mute" style="margin-top:0">Which tire is it on?</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button data-tw="front">Front tire</button><button data-tw="rear">Rear tire</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="ghost" data-tw="later">Not now</button><button class="ghost" data-tw="never">Don't ask about this sensor</button></div></div>`;
+  d.addEventListener('click',ev=>{const b=ev.target.closest('[data-tw]');if(!b)return;const v=b.dataset.tw,w=twS();
+    if(v==='front'||v==='rear'){w[v]={id:o.id,name:o.name||'TyreWiz',since:Date.now(),psi:null,at:0};w.asked[o.id]=1;twPost({cmd:'pair',id:o.id})}
+    else if(v==='never'){w.asked[o.id]=1}
+    save();d.remove();render(true)});
+  document.body.appendChild(d);const f=d.querySelector('button');if(f)f.focus()}
+function twCard(){if(!twHandler())return '';const w=twS(),rows=['front','rear'].map(k=>{const x=w[k];return `<tr><td>${k==='front'?'Front':'Rear'}</td><td>${x?esc(x.name):'not paired'}</td><td>${x?(twReading(k)?twReading(k).psi.toFixed(1)+' PSI (live)':'estimate (no readable pressure yet)'):'estimate'}</td></tr>`}).join('');
+  const lines=w.log.slice(-60).map(r=>`${new Date(r.t).toLocaleTimeString()} ${r.k} svc ${r.s} chr ${r.c} props ${r.p} ${r.h}`).join('\n');
+  return `<div class="card"><h2>TyreWiz sensor</h2><p class="mute" style="margin-top:0">When your phone hears a TyreWiz, the app asks if you want to pair it. A paired sensor's reading is used for that tire while it is fresh; otherwise the app uses its own estimate. SRAM does not publish how the sensor sends pressure, so this version records what the sensor sends and keeps using the estimate until the format is decoded.</p><div class="scroll"><table><thead><tr><th></th><th>Sensor</th><th>Pressure source</th></tr></thead><tbody>${rows}</tbody></table></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0"><button data-act="twscan">Look for TyreWiz again</button><button class="ghost" data-act="twforget">Forget paired sensors</button><button class="ghost" data-act="twcopy">Copy sensor log</button><span id="twStatus" class="mute"></span></div><details><summary>Sensor log (last ${Math.min(60,w.log.length)} messages)</summary><textarea readonly rows="10" style="width:100%;font:11px ui-monospace,monospace">${esc(lines)}</textarea></details></div>`}
+
 /* ---------- traffic: optional, nudges the road temperature estimate up in heavy traffic ---------- */
 const AI_URL_DEFAULT='';   // paste your deployed AI review address here to ship it built in, or leave empty and enter it in the app (Data tab)
 const aiS=()=>{S.ai=S.ai||{url:'',code:''};return S.ai};
@@ -1574,6 +1604,9 @@ document.addEventListener('click',async ev=>{
   const b=ev.target.closest('[data-act]');if(!b)return;const act=b.dataset.act;
   if(act==='garminconnect'){const h=garminHandler();if(h)h.postMessage('select');return}
   if(act==='garminsend'){pushGarmin(true);return}
+  if(act==='twscan'){const w=twS();w.asked={};save();twPost({cmd:'rescan'});window.__tyrewizStatus&&window.__tyrewizStatus('Looking for a TyreWiz...');return}
+  if(act==='twforget'){const w=twS();twPaired().forEach(id=>twPost({cmd:'forget',id}));w.front=null;w.rear=null;save();render(true);return}
+  if(act==='twcopy'){const w=twS(),t=w.log.map(r=>`${new Date(r.t).toISOString()} ${r.k} svc ${r.s} chr ${r.c} props ${r.p} ${r.h}`).join('\n');try{navigator.clipboard.writeText(t).then(()=>window.__tyrewizStatus('Copied.'),()=>window.__tyrewizStatus('Could not copy. Open the log and select the text.'))}catch(e){window.__tyrewizStatus('Could not copy. Open the log and select the text.')}return}
   if(act==='staleok'){staleAck=true;render(true);return}
   const tire=()=>S.tires[+$('#lt').value],dateMs=()=>toMs($('#ld').value);
   if(act==='back'){detail=null;render();window.scrollTo(0,0)}
@@ -2048,7 +2081,7 @@ const SEALANT_URL='https://raw.githubusercontent.com/mpassman/TyreGuru/main/seal
   fetch(SEALANT_URL,{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&TG.setSealants(j)){try{localStorage.setItem('tg_sealants',JSON.stringify(j))}catch(e){}render()}}).catch(()=>{})})();
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
 (async()=>{if(!S.example)return;let had=null;try{had=localStorage.getItem(KEY)}catch(e){}if(had||window.__nativeState)return;const j=await idbGet();if(j&&loadJson(j))render()})();
-pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();
+pruneStrava();alOpenCheck();autoLocate();autoHealth();stravaSync();syncAll();twStart();
 document.addEventListener('visibilitychange',()=>{if(document.hidden){alHiddenAt=Date.now();return}if(!document.hidden){if(alHiddenAt&&Date.now()-alHiddenAt>30000)alOpenCheck();alHiddenAt=0;try{if(tab==='home'&&detail===null)render(true);else checkAlerts()}catch(e){}autoLocate();autoHealth();stravaSync();syncAll()}});
 let alBeat=Date.now();setInterval(()=>{const n=Date.now();if(n-alBeat>30000&&!document.hidden)alOpenCheck();alBeat=n},2000);window.addEventListener('pageshow',ev=>{if(ev.persisted)alOpenCheck()});
 window.__TG={get S(){return S},xweatherRoad,logRoad,applyRoadLog,roadLog,get now(){return now},importFiles,render,alOpenCheck,garminPayload,checkAlerts,milesLeft,repairInfo,tireLv,wear,alUnlock,alFire,buildCsv,cmpPairs,cmpStats,fillPushEst,checkPushEst,setAck:v=>{staleAck=v}};

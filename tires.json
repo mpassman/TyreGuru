@@ -323,6 +323,36 @@
    "srcUrl": "https://m.bikeforums.net/showthread.php?p=22401577",
    "note": "Bike Forums thread: rear tires reported 2,500 to 4,000 mi (one outlier 8,000)",
    "unreliable": true
+  },
+  {
+   "brand": "pirelli",
+   "model": "p zero race tlr rs",
+   "kind": "rider",
+   "lowMi": 2500,
+   "highMi": 5000,
+   "srcUrl": "https://cyclingarchives.com/pirelli-p-zero-race-tlr-review-2026-tubeless-road-tire-tested-12400-km/",
+   "note": "Long-term tester: rear squared off near 4,000 km, replaced at 5,200 km; a Weight Weenies poster reports 8,000 to 9,000 km",
+   "unreliable": true
+  },
+  {
+   "brand": "pirelli",
+   "model": "cinturato gravel m",
+   "kind": "rider",
+   "lowMi": 2500,
+   "highMi": 3100,
+   "srcUrl": "https://lr.in.psf.lt/r/gravelcycling/comments/1f0tnub/cinturato_gravel_m_review_after_about_4500km",
+   "note": "r/gravelcycling: rear worn near 4,500 km; another rider projects about 5,000 km on a 45 mm rear",
+   "unreliable": true
+  },
+  {
+   "brand": "continental",
+   "model": "terra speed",
+   "kind": "rider",
+   "lowMi": 500,
+   "highMi": 600,
+   "srcUrl": "https://m.bikeforums.net/showthread.php?p=22564204",
+   "note": "Bike Forums: several riders report about 500 to 600 miles per rear tire (one reports over 2,000 on trails)",
+   "unreliable": true
   }
  ],
  "lifeNote": "Tread life is not published by most makers. These are rider-reported ranges, unreliable, and depend on rider weight, surface, pressure and rear vs front. Schwalbe only gives a generic 2,000 to 5,000 km for standard tires (schwalbe.com/en/technology-faq/tire-wear/)."
